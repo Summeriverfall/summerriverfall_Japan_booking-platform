@@ -1,0 +1,628 @@
+/**
+ * 时间轴看板渲染 + 邮件用「床位实时状态图」生成（Canvas → PNG）
+ */
+(function (global) {
+  const TYPE_COLOR = {
+    booking: '#2f6fed',
+    pending: '#d97706',
+    hold: '#7c3aed',
+    closure: '#6b7280',
+  };
+
+  function hourLabels() {
+    const cfg = STORE_CONFIG;
+    const labels = [];
+    let h = cfg.openHour;
+    while (true) {
+      labels.push(h);
+      h = (h + 1) % 24;
+      if (h === cfg.closeHour) {
+        labels.push(h);
+        break;
+      }
+    }
+    return labels;
+  }
+
+  /** 小时格元数据：宽度按真实分钟比例，与选区/占用定位同一坐标系 */
+  function hourSlotMeta() {
+    const span = BookingStore.businessSpanMinutes();
+    const slots = [];
+    let offset = 0;
+    while (offset < span) {
+      const duration = Math.min(60, span - offset);
+      const startTime = BookingStore.offsetToTime(offset);
+      const endTime = BookingStore.offsetToTime(offset + duration);
+      slots.push({
+        hour: Number(startTime.split(':')[0]),
+        startOffset: offset,
+        duration,
+        widthPct: (duration / span) * 100,
+        startTime,
+        endTime,
+      });
+      offset += duration;
+    }
+    return slots;
+  }
+
+  function hourSlots() {
+    return hourSlotMeta().map((s) => s.hour);
+  }
+
+  function renderBoard(container, dateStr, options) {
+    const cfg = STORE_CONFIG;
+    const span = BookingStore.businessSpanMinutes();
+    const items = BookingStore.occupancyForDate(dateStr);
+    const opts = options || {};
+    const slotMeta = hourSlotMeta();
+    const snap = 30; // 拖选半小时对齐
+
+    container.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'board';
+
+    const head = document.createElement('div');
+    head.className = 'board-head';
+    head.innerHTML = `<div class="board-corner">床位</div><div class="board-hours"></div>`;
+    const hoursEl = head.querySelector('.board-hours');
+    const hourCells = [];
+    slotMeta.forEach((slot, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'board-hour';
+      cell.dataset.hourIndex = String(idx);
+      cell.style.flex = `0 0 ${slot.widthPct}%`;
+      cell.style.width = `${slot.widthPct}%`;
+      cell.textContent = String(slot.hour).padStart(2, '0');
+      cell.title = `${slot.startTime} – ${slot.endTime}`;
+      hoursEl.appendChild(cell);
+      hourCells.push(cell);
+    });
+    wrap.appendChild(head);
+
+    function offsetFromClientX(track, clientX) {
+      const rect = track.getBoundingClientRect();
+      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      const raw = ratio * span;
+      const snapped = Math.floor(raw / snap) * snap;
+      return Math.min(Math.max(0, span - snap), snapped);
+    }
+
+    function applyHourHeaderHighlight(startOff, endOff) {
+      hourCells.forEach((cell, idx) => {
+        const slot = slotMeta[idx];
+        const hit =
+          slot.startOffset < endOff && slot.startOffset + slot.duration > startOff;
+        cell.classList.toggle('is-selected', hit);
+      });
+    }
+
+    function clearHourHeaderHighlight() {
+      hourCells.forEach((cell) => cell.classList.remove('is-selected'));
+    }
+
+    function paintSelection(selEl, startOff, endOff) {
+      const a = Math.min(startOff, endOff);
+      const b = Math.max(startOff, endOff) + snap;
+      const end = Math.min(span, b);
+      selEl.style.left = `${(a / span) * 100}%`;
+      selEl.style.width = `${((end - a) / span) * 100}%`;
+      selEl.hidden = false;
+      return { start: a, end };
+    }
+
+    function paintBedsRange(bedA, bedB, startOff, endOff) {
+      const b0 = Math.min(bedA, bedB);
+      const b1 = Math.max(bedA, bedB);
+      let range = null;
+      wrap.querySelectorAll('.board-track').forEach((t) => {
+        const bed = Number(t.dataset.bed);
+        const sel = t.querySelector('.board-selection');
+        if (!sel) return;
+        if (bed >= b0 && bed <= b1) {
+          range = paintSelection(sel, startOff, endOff);
+        } else {
+          sel.hidden = true;
+        }
+      });
+      if (range) applyHourHeaderHighlight(range.start, range.end);
+      return {
+        range,
+        bedIndexes: Array.from({ length: b1 - b0 + 1 }, (_, i) => b0 + i),
+      };
+    }
+
+    function bedFromClientY(clientY) {
+      const tracks = [...wrap.querySelectorAll('.board-track')];
+      for (const t of tracks) {
+        const r = t.getBoundingClientRect();
+        if (clientY >= r.top && clientY <= r.bottom) return Number(t.dataset.bed);
+      }
+      if (!tracks.length) return 0;
+      const first = tracks[0].getBoundingClientRect();
+      const last = tracks[tracks.length - 1].getBoundingClientRect();
+      if (clientY < first.top) return Number(tracks[0].dataset.bed);
+      if (clientY > last.bottom) return Number(tracks[tracks.length - 1].dataset.bed);
+      // 落在行间隙时取最近
+      let best = 0;
+      let bestDist = Infinity;
+      tracks.forEach((t) => {
+        const r = t.getBoundingClientRect();
+        const mid = (r.top + r.bottom) / 2;
+        const d = Math.abs(clientY - mid);
+        if (d < bestDist) {
+          bestDist = d;
+          best = Number(t.dataset.bed);
+        }
+      });
+      return best;
+    }
+
+    function anyTrackFromClientX(clientX) {
+      const t = wrap.querySelector('.board-track');
+      return t ? offsetFromClientX(t, clientX) : 0;
+    }
+
+    let activeDrag = null;
+
+    function onDragMove(e) {
+      if (!activeDrag) return;
+      const curBed = bedFromClientY(e.clientY);
+      const curOff = anyTrackFromClientX(e.clientX);
+      paintBedsRange(activeDrag.startBed, curBed, activeDrag.startOff, curOff);
+      activeDrag.curBed = curBed;
+      activeDrag.curOff = curOff;
+    }
+
+    function onDragEnd(e) {
+      if (!activeDrag) return;
+      const curBed = bedFromClientY(e.clientY);
+      const curOff = anyTrackFromClientX(e.clientX);
+      const painted = paintBedsRange(
+        activeDrag.startBed,
+        curBed,
+        activeDrag.startOff,
+        curOff
+      );
+      wrap.classList.remove('is-dragging');
+      window.removeEventListener('pointermove', onDragMove);
+      window.removeEventListener('pointerup', onDragEnd);
+      window.removeEventListener('pointercancel', onDragEnd);
+      const drag = activeDrag;
+      activeDrag = null;
+      if (!painted.range) return;
+      if (opts.onRangeSelect) {
+        opts.onRangeSelect({
+          bedIndex: painted.bedIndexes[0],
+          bedIndexes: painted.bedIndexes,
+          guests: painted.bedIndexes.length,
+          startOffset: painted.range.start,
+          endOffset: painted.range.end,
+          startTime: BookingStore.offsetToTime(painted.range.start),
+          endTime: BookingStore.offsetToTime(painted.range.end),
+          durationMinutes: painted.range.end - painted.range.start,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        });
+      }
+    }
+
+    for (let bed = 0; bed < cfg.bedCount; bed++) {
+      const row = document.createElement('div');
+      row.className = 'board-row';
+      const label = document.createElement('div');
+      label.className = 'board-label';
+      label.textContent = cfg.bedLabels[bed] || `${bed + 1}号床`;
+      const track = document.createElement('div');
+      track.className = 'board-track';
+      track.dataset.bed = String(bed);
+
+      const grid = document.createElement('div');
+      grid.className = 'board-hour-grid';
+      grid.setAttribute('aria-hidden', 'true');
+      slotMeta.forEach((slot) => {
+        const cell = document.createElement('div');
+        cell.className = 'board-hour-cell';
+        if (slot.duration < 60) cell.classList.add('is-partial');
+        cell.style.flex = `0 0 ${slot.widthPct}%`;
+        cell.style.width = `${slot.widthPct}%`;
+        if (slot.duration >= 60) {
+          const mid = document.createElement('i');
+          mid.className = 'board-half-tick';
+          cell.appendChild(mid);
+        }
+        grid.appendChild(cell);
+      });
+      track.appendChild(grid);
+
+      const sel = document.createElement('div');
+      sel.className = 'board-selection';
+      sel.hidden = true;
+      track.appendChild(sel);
+
+      const selBeds = (opts.selection && (opts.selection.bedIndexes || (opts.selection.bedIndex != null ? [opts.selection.bedIndex] : null))) || null;
+      if (
+        selBeds &&
+        selBeds.includes(bed) &&
+        Number.isFinite(opts.selection.startOffset) &&
+        Number.isFinite(opts.selection.endOffset)
+      ) {
+        paintSelection(
+          sel,
+          opts.selection.startOffset,
+          Math.max(opts.selection.startOffset, opts.selection.endOffset - snap)
+        );
+        applyHourHeaderHighlight(opts.selection.startOffset, opts.selection.endOffset);
+      }
+
+      items
+        .filter((x) => x.bedIndex === bed)
+        .forEach((x) => {
+          const block = document.createElement('div');
+          block.className = `board-block type-${x.type}`;
+          block.style.left = `${(x.start / span) * 100}%`;
+          block.style.width = `${((x.end - x.start) / span) * 100}%`;
+          const title =
+            x.type === 'closure'
+              ? `关闭 ${x.startTime}-${x.endTime}`
+              : x.type === 'hold'
+                ? `预占 ${x.startTime}-${x.endTime}`
+                : `${x.ref.guestName || '预约'} ${x.startTime} · ${x.ref.guests || 1}人`;
+          block.title = title;
+          const labelEl = document.createElement('span');
+          labelEl.className = 'board-block-label';
+          labelEl.textContent =
+            x.type === 'closure' ? '关' : x.type === 'hold' ? '占' : x.ref.guestName || '约';
+          block.appendChild(labelEl);
+
+          if (x.type !== 'closure' && x.ref && x.ref.id) {
+            block.dataset.bookingId = x.ref.id;
+            const bedsSorted = (x.ref.beds || [bed]).slice().sort((a, c) => a - c);
+            const selected = opts.selectedBookingId === x.ref.id;
+            if (selected) {
+              block.classList.add('is-selected');
+              [['w', '左'], ['e', '右']].forEach(([h]) => {
+                const hd = document.createElement('i');
+                hd.className = `blk-handle blk-handle-${h}`;
+                hd.dataset.handle = h;
+                block.appendChild(hd);
+              });
+              if (bed === bedsSorted[0]) {
+                const hd = document.createElement('i');
+                hd.className = 'blk-handle blk-handle-n';
+                hd.dataset.handle = 'n';
+                block.appendChild(hd);
+              }
+              if (bed === bedsSorted[bedsSorted.length - 1]) {
+                const hd = document.createElement('i');
+                hd.className = 'blk-handle blk-handle-s';
+                hd.dataset.handle = 's';
+                block.appendChild(hd);
+              }
+            }
+
+            block.addEventListener('pointerdown', (e) => {
+              if (e.button !== 0) return;
+              e.stopPropagation();
+              e.preventDefault();
+              const handle = e.target.closest('.blk-handle');
+              if (opts.selectedBookingId !== x.ref.id) {
+                if (opts.onBookingSelect) {
+                  opts.onBookingSelect(x.ref, { clientX: e.clientX, clientY: e.clientY });
+                }
+                return;
+              }
+              // 已选中：拖动手柄改尺寸，拖动本体改位置
+              startBookingEdit(x.ref, handle ? handle.dataset.handle : 'move', e);
+            });
+          }
+
+          if (opts.onBlockClick && x.type === 'closure') {
+            block.addEventListener('click', (e) => {
+              e.stopPropagation();
+              opts.onBlockClick(x);
+            });
+          }
+          track.appendChild(block);
+        });
+
+      track.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('.board-block')) return;
+        e.preventDefault();
+        if (opts.onClearBookingSelect) opts.onClearBookingSelect();
+        const startOff = offsetFromClientX(track, e.clientX);
+        activeDrag = { startBed: bed, startOff, curBed: bed, curOff: startOff };
+        wrap.classList.add('is-dragging');
+        paintBedsRange(bed, bed, startOff, startOff);
+        window.addEventListener('pointermove', onDragMove);
+        window.addEventListener('pointerup', onDragEnd);
+        window.addEventListener('pointercancel', onDragEnd);
+      });
+
+      row.appendChild(label);
+      row.appendChild(track);
+      wrap.appendChild(row);
+    }
+
+    function startBookingEdit(booking, mode, e) {
+      const beds0 = (booking.beds || []).slice().sort((a, c) => a - c);
+      const start0 = BookingStore.timeToOffset(booking.startTime);
+      const end0 = start0 + booking.durationMinutes;
+      const originOff = anyTrackFromClientX(e.clientX);
+      const originBed = bedFromClientY(e.clientY);
+      const edit = {
+        id: booking.id,
+        mode,
+        start0,
+        end0,
+        beds0,
+        originOff,
+        originBed,
+      };
+      wrap.classList.add('is-editing-block');
+
+      function applyPreview(startOff, endOff, beds) {
+        const b0 = Math.min(...beds);
+        const b1 = Math.max(...beds);
+        wrap.querySelectorAll(`.board-block[data-booking-id="${booking.id}"]`).forEach((el) => {
+          el.style.opacity = '0.3';
+        });
+        paintBedsRange(b0, b1, startOff, Math.max(startOff, endOff - snap));
+        edit.preview = { startOff, endOff, beds };
+      }
+
+      function onEditMove(ev) {
+        const curOff = anyTrackFromClientX(ev.clientX);
+        const curBed = bedFromClientY(ev.clientY);
+        let startOff = edit.start0;
+        let endOff = edit.end0;
+        let beds = edit.beds0.slice();
+
+        if (edit.mode === 'move') {
+          let dOff = Math.round((curOff - edit.originOff) / snap) * snap;
+          let dBed = curBed - edit.originBed;
+          startOff = edit.start0 + dOff;
+          endOff = edit.end0 + dOff;
+          if (startOff < 0) {
+            endOff -= startOff;
+            startOff = 0;
+          }
+          if (endOff > span) {
+            startOff -= endOff - span;
+            endOff = span;
+          }
+          startOff = Math.max(0, Math.min(span - snap, startOff));
+          endOff = Math.max(startOff + snap, Math.min(span, endOff));
+          beds = edit.beds0.map((b) => b + dBed);
+          const minB = Math.min(...beds);
+          const maxB = Math.max(...beds);
+          if (minB < 0) beds = beds.map((b) => b - minB);
+          if (maxB >= cfg.bedCount) {
+            const over = maxB - (cfg.bedCount - 1);
+            beds = beds.map((b) => b - over);
+          }
+        } else if (edit.mode === 'e') {
+          endOff = Math.max(startOff + snap, Math.min(span, Math.round(curOff / snap) * snap + snap));
+        } else if (edit.mode === 'w') {
+          startOff = Math.min(endOff - snap, Math.max(0, Math.round(curOff / snap) * snap));
+        } else if (edit.mode === 'n') {
+          const top = Math.min(curBed, edit.beds0[edit.beds0.length - 1]);
+          const bottom = edit.beds0[edit.beds0.length - 1];
+          beds = Array.from({ length: bottom - top + 1 }, (_, i) => top + i);
+        } else if (edit.mode === 's') {
+          const top = edit.beds0[0];
+          const bottom = Math.max(curBed, top);
+          beds = Array.from({ length: bottom - top + 1 }, (_, i) => top + i);
+        }
+
+        applyPreview(startOff, endOff, beds);
+      }
+
+      function onEditEnd() {
+        window.removeEventListener('pointermove', onEditMove);
+        window.removeEventListener('pointerup', onEditEnd);
+        window.removeEventListener('pointercancel', onEditEnd);
+        wrap.classList.remove('is-editing-block');
+        const p = edit.preview;
+        if (!p || !opts.onBookingLayoutChange) return;
+        opts.onBookingLayoutChange({
+          id: edit.id,
+          startTime: BookingStore.offsetToTime(p.startOff),
+          durationMinutes: p.endOff - p.startOff,
+          beds: p.beds,
+          guests: p.beds.length,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        });
+      }
+
+      applyPreview(start0, end0, beds0);
+      window.addEventListener('pointermove', onEditMove);
+      window.addEventListener('pointerup', onEditEnd);
+      window.addEventListener('pointercancel', onEditEnd);
+    }
+
+    if (!opts.selection) clearHourHeaderHighlight();
+
+    const legend = document.createElement('div');
+    legend.className = 'board-legend';
+    legend.innerHTML = `
+      <span><i class="lg booking"></i>已确认预约</span>
+      <span><i class="lg pending"></i>待客服确认（≥2人）</span>
+      <span><i class="lg hold"></i>仅预占（未建单）</span>
+      <span><i class="lg closure"></i>商家关闭</span>
+      <span><i class="lg selection"></i>空档拖选 / 选中块可拖移与拉伸</span>
+    `;
+    wrap.appendChild(legend);
+    container.appendChild(wrap);
+  }
+
+  /**
+   * 生成给商家邮件用的床位状态图（返回 dataURL）
+   */
+  function buildStatusChartImage(dateStr, highlightBookingId) {
+    const cfg = STORE_CONFIG;
+    const span = BookingStore.businessSpanMinutes();
+    const items = BookingStore.occupancyForDate(dateStr);
+    const labels = hourSlotMeta();
+
+    const left = 72;
+    const axisH = 22; // 小时刻度专用带
+    const textH = 70; // 标题文字区（与刻度完全分开）
+    const top = textH + axisH; // 床位轨道起点
+    const rowH = 36;
+    const footerH = 44;
+    const width = 920;
+    const height = top + cfg.bedCount * rowH + footerH;
+    const trackW = width - left - 24;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#faf7f2';
+    ctx.fillRect(0, 0, width, height);
+
+    // 文字区背景，和下方刻度带视觉分隔
+    ctx.fillStyle = '#f3eee6';
+    ctx.fillRect(0, 0, width, textH);
+    ctx.strokeStyle = '#e5ddd3';
+    ctx.beginPath();
+    ctx.moveTo(0, textH);
+    ctx.lineTo(width, textH);
+    ctx.stroke();
+
+    ctx.fillStyle = '#2c2c2c';
+    ctx.font = '600 18px sans-serif';
+    ctx.fillText(`${cfg.storeName.cn} · 床位使用时段`, 20, 26);
+
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#5a5a5a';
+    ctx.fillText(`营业日 ${dateStr}`, 20, 48);
+    ctx.fillText(`营业时段 ${cfg.hoursLabel || ''}`, 200, 48);
+    ctx.fillText(`生成于 ${new Date().toLocaleString('zh-CN')}`, 20, 66);
+
+    // 小时刻度：按真实时长比例
+    const axisBaseline = textH + 16;
+    labels.forEach((slot) => {
+      const x = left + (slot.startOffset / span) * trackW;
+      ctx.strokeStyle = '#e8e0d6';
+      ctx.beginPath();
+      ctx.moveTo(x, top);
+      ctx.lineTo(x, top + cfg.bedCount * rowH);
+      ctx.stroke();
+      if (slot.duration >= 60) {
+        const midX = left + ((slot.startOffset + 30) / span) * trackW;
+        ctx.strokeStyle = '#efe6da';
+        ctx.beginPath();
+        ctx.moveTo(midX, top);
+        ctx.lineTo(midX, top + cfg.bedCount * rowH);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#8a8178';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(String(slot.hour).padStart(2, '0'), x + 2, axisBaseline);
+    });
+    // 右边界
+    ctx.strokeStyle = '#e8e0d6';
+    ctx.beginPath();
+    ctx.moveTo(left + trackW, top);
+    ctx.lineTo(left + trackW, top + cfg.bedCount * rowH);
+    ctx.stroke();
+
+    for (let bed = 0; bed < cfg.bedCount; bed++) {
+      const y = top + bed * rowH;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(left, y + 4, trackW, rowH - 8);
+      ctx.strokeStyle = '#e5ddd3';
+      ctx.strokeRect(left, y + 4, trackW, rowH - 8);
+
+      ctx.fillStyle = '#2c2c2c';
+      ctx.font = '13px sans-serif';
+      ctx.fillText(cfg.bedLabels[bed], 12, y + rowH / 2 + 4);
+
+      items
+        .filter((x) => x.bedIndex === bed)
+        .forEach((x) => {
+          const bx = left + (x.start / span) * trackW;
+          const bw = Math.max(4, ((x.end - x.start) / span) * trackW);
+          const hi = highlightBookingId && x.ref && x.ref.id === highlightBookingId;
+          ctx.fillStyle = TYPE_COLOR[x.type] || '#999';
+          if (hi) {
+            ctx.fillStyle = '#1E8E4F';
+          }
+          ctx.fillRect(bx, y + 8, bw, rowH - 16);
+        });
+    }
+
+    // legend
+    const ly = height - 22;
+    const legs = [
+      ['#2f6fed', '已确认'],
+      ['#d97706', '待确认'],
+      ['#7c3aed', '预占'],
+      ['#6b7280', '商家关闭'],
+      ['#1E8E4F', '本单高亮'],
+    ];
+    let lx = 20;
+    legs.forEach(([c, t]) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(lx, ly - 8, 12, 12);
+      ctx.fillStyle = '#444';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(t, lx + 16, ly + 2);
+      lx += 78;
+    });
+
+    return canvas.toDataURL('image/png');
+  }
+
+  function buildEmailDraft(booking, eventType) {
+    const cfg = STORE_CONFIG;
+    const course = cfg.courses.find((c) => c.id === booking.courseId);
+    const channel = cfg.channels.find((c) => c.id === booking.channelId);
+    const beds = (booking.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+    const end = BookingStore.offsetToTime(
+      BookingStore.timeToOffset(booking.startTime) + booking.durationMinutes
+    );
+    const eventLabel =
+      eventType === 'reschedule' ? '改期通知' : eventType === 'confirm' ? '预约确认' : '新预约通知';
+
+    const subject = `${cfg.emailSubjectPrefix}${eventLabel} ${booking.date} ${booking.startTime}`;
+    const body = [
+      `【${eventLabel}】（邮件正文模板待提供，以下为测试占位）`,
+      '',
+      `门店：${cfg.storeName.cn}`,
+      `单号：${booking.id}`,
+      `状态：${booking.status}`,
+      `日期：${booking.date}`,
+      `时段：${booking.startTime} – ${end}`,
+      `时长：${booking.durationMinutes} 分钟`,
+      `人数：${booking.guests}`,
+      `床位：${beds}`,
+      `项目：${course ? course.name : '-'}`,
+      `渠道：${channel ? channel.name : '-'}`,
+      `客人：${booking.guestName || '-'}`,
+      `电话：${booking.guestPhone || '-'}`,
+      `备注：${booking.note || '-'}`,
+      '',
+      '附件/配图：床位使用时段实时状态图（见预览区图片）',
+      '',
+      '— 御足苑预约管理平台（功能测试版）',
+    ].join('\n');
+
+    return { subject, body, chartDataUrl: buildStatusChartImage(booking.date, booking.id) };
+  }
+
+  global.BoardUI = {
+    renderBoard,
+    buildStatusChartImage,
+    buildEmailDraft,
+    hourLabels,
+    hourSlots,
+    hourSlotMeta,
+  };
+})(window);

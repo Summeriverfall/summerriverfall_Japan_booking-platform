@@ -1,0 +1,8 @@
+# archives / local junk
+*.zip
+source-images/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*

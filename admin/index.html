@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>门店预约平台</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="portal.css">
+</head>
+<body class="portal-body">
+  <div class="portal-bg" aria-hidden="true"></div>
+  <main class="portal-shell">
+    <header class="portal-hero">
+      <p class="eyebrow">Reserve Desk · 功能测试</p>
+      <h1>门店预约管理</h1>
+      <p class="lede">客服从管理员端选店进入；店家使用识别码登录商家端。测试店：Ruana、Starry Flow。</p>
+    </header>
+
+    <div class="portal-entries">
+      <a class="entry-card entry-admin" href="admin-portal.html">
+        <span class="entry-kicker">客服 / 运营</span>
+        <h2>管理员端</h2>
+        <p>选择门店后进入客服看板：排床、建单、确认、改期与邮件预览。</p>
+        <span class="entry-go">进入选店 →</span>
+      </a>
+      <a class="entry-card entry-merchant" href="merchant-login.html">
+        <span class="entry-kicker">门店负责人</span>
+        <h2>商家登录</h2>
+        <p>输入门店识别码，进入关床 / 开床与当日占用一览。</p>
+        <span class="entry-go">去登录 →</span>
+      </a>
+    </div>
+
+    <p class="portal-foot">本机演示数据存于浏览器 localStorage，无真实账号体系。</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商家端 · 开关床</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand" id="pageBrand">商家端<div class="hint" style="margin:0" id="pageSub">加载中…</div></div>
+    <nav class="nav">
+      <a href="merchant-login.html">切换门店</a>
+      <a class="active" href="#" id="navMerchant">关床管理</a>
+      <a href="index.html">平台入口</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <div class="toolbar">
+      <div class="field"><label>营业日</label><input type="date" id="dateInput"></div>
+      <button class="btn" type="button" id="btnRefresh">刷新</button>
+    </div>
+
+    <div class="grid-stack">
+      <section class="card card-board">
+        <h2>当前占用一览（只读）</h2>
+        <p class="hint">蓝色预约、橙色待确认、紫色预占、灰色为你关闭的时段。与客服端同一套本店数据。</p>
+        <div id="board"></div>
+      </section>
+
+      <section class="card card-form">
+        <h2>关闭床位时段</h2>
+        <p class="hint">用于线下客流、临时维护等非预约占用。关闭后客服不可再约该段。</p>
+        <div class="toolbar">
+          <div class="field"><label>开始</label><input type="time" id="startTime" value="15:00"></div>
+          <div class="field"><label>结束</label><input type="time" id="endTime" value="17:00"></div>
+        </div>
+        <div class="field" style="margin-bottom:.6rem">
+          <label>关闭哪些床（不勾选=全部床位）</label>
+          <div class="bed-checks" id="bedChecks"></div>
+        </div>
+        <div class="field" style="margin-bottom:.6rem"><label>原因</label><input id="reason" placeholder="如：散客 / 维护"></div>
+        <button class="btn primary" type="button" id="btnClose">确认关闭</button>
+        <div class="err" id="formErr"></div>
+
+        <h3>当日关闭记录</h3>
+        <div class="list" id="closureList"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="stores.js"></script>
+  <script src="store.js"></script>
+  <script src="board-render.js"></script>
+  <script src="merchant-app.js"></script>
+</body>
+</html>

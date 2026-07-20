@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客服端 · 门店预约</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand" id="pageBrand">客服端<div class="hint" style="margin:0" id="pageSub">加载中…</div></div>
+    <nav class="nav">
+      <a href="admin-portal.html">切换门店</a>
+      <a class="active" href="#" id="navCs">客服看板</a>
+      <a href="index.html">平台入口</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <div class="toolbar">
+      <div class="field">
+        <label>营业日</label>
+        <input type="date" id="dateInput">
+      </div>
+      <button class="btn" type="button" id="btnRefresh">刷新看板</button>
+      <button class="btn ghost" type="button" id="btnExport">导出数据</button>
+      <button class="btn danger" type="button" id="btnReset">清空本店测试数据</button>
+      <span class="hint" id="remainHint"></span>
+    </div>
+
+    <div class="grid-stack">
+      <section class="card card-board">
+        <h2>床位时间轴（预约 + 商家关闭）</h2>
+        <p class="hint">空档拖选可新建；点击已有色块选中后，可拖动移动，左右拉改时长，上下拉改床数。渠道默认 WhatsApp。</p>
+        <div id="board"></div>
+      </section>
+
+      <section class="card card-form">
+        <h2>WhatsApp 预约信息粘贴</h2>
+        <p class="hint">粘贴确认信 / 客人预约原文，自动解析姓名、时间、人数、项目、联系方式等并填入侧栏；可一键创建。</p>
+        <textarea id="waPaste" class="wa-paste" placeholder="在此粘贴 WhatsApp 预约信息…"></textarea>
+        <div class="form-actions" style="margin-top:.6rem">
+          <button class="btn primary" type="button" id="btnParseWa">解析并填入侧栏</button>
+          <button class="btn" type="button" id="btnParseWaCreate">解析并直接创建预约</button>
+        </div>
+        <div class="err" id="waErr"></div>
+
+        <h3>当日订单</h3>
+        <div class="list" id="bookingList"></div>
+        <div class="err" id="formErr"></div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:1rem" id="emailPanel">
+      <h2>商家邮件预览（正文模板待你提供）</h2>
+      <p class="hint">确认单 / 改期后会在此生成；含床位使用时段状态图。目前不真实发送，可下载图片。</p>
+      <div class="email-box" id="emailBox">
+        <div class="hint">暂无预览。创建并确认订单后显示。</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 鼠标旁上下文菜单（类 Windows 右键） -->
+  <div class="ctx-menu" id="sidePanel" aria-hidden="true" hidden>
+    <div class="ctx-menu-head">
+      <div>
+        <strong>预约编辑</strong>
+        <p class="hint" id="sideHint" style="margin:0">选中后可在此修改</p>
+      </div>
+      <button type="button" class="side-x" id="btnSideCloseTop" aria-label="关闭">×</button>
+    </div>
+    <div class="ctx-menu-body">
+      <div class="side-field"><label>开始时间</label><input id="startTime" type="time"></div>
+      <div class="side-field"><label>时长(分)</label><input id="duration" type="number" min="30" step="30" value="60"></div>
+      <div class="side-field"><label>人数（跨床拖选会自动填）</label><input id="guests" type="number" min="1" max="5" value="1"></div>
+      <div class="side-field"><label>指定床位</label><div class="bed-checks" id="sideBeds"></div></div>
+      <div class="side-field"><label>项目</label><select id="course"></select></div>
+      <div class="side-field"><label>渠道</label><select id="channel"></select></div>
+      <div class="side-field"><label>客人姓名</label><input id="guestName" placeholder="可选"></div>
+      <div class="side-field"><label>电话 / WhatsApp</label><input id="guestPhone" placeholder="可选"></div>
+      <div class="side-field"><label>备注</label><textarea id="note" placeholder="过敏/指定等"></textarea></div>
+      <p class="hint warn" id="multiHint">≥2 人创建后为「待确认」，需再点确认才出邮件预览。</p>
+      <div class="err" id="sideErr"></div>
+    </div>
+    <div class="ctx-menu-foot">
+      <button type="button" class="btn" id="btnHold">仅预占</button>
+      <button type="button" class="btn primary" id="btnCreate">创建预约</button>
+      <button type="button" class="btn ghost" id="btnSideClose">关闭</button>
+    </div>
+  </div>
+
+  <script src="stores.js"></script>
+  <script src="store.js"></script>
+  <script src="board-render.js"></script>
+  <script src="wa-parse.js"></script>
+  <script src="cs-app.js"></script>
+</body>
+</html>

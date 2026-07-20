@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理员端 · 选择门店</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="portal.css">
+</head>
+<body class="portal-body">
+  <div class="portal-bg" aria-hidden="true"></div>
+  <main class="portal-shell">
+    <header class="portal-hero portal-hero-sm">
+      <a class="back-link" href="index.html">← 返回平台入口</a>
+      <p class="eyebrow">Admin</p>
+      <h1>选择门店</h1>
+      <p class="lede">进入后即为该店客服端。各店数据相互隔离。</p>
+    </header>
+
+    <div class="store-grid" id="storeGrid"></div>
+  </main>
+
+  <script src="stores.js"></script>
+  <script>
+    StoreRegistry.setRole('admin');
+    const grid = document.getElementById('storeGrid');
+    grid.innerHTML = StoreRegistry.listStores()
+      .map((s) => `
+        <a class="store-card" href="cs.html?store=${encodeURIComponent(s.storeId)}" style="--accent:${s.accent}">
+          <div class="store-card-top">
+            <span class="store-badge">客服看板</span>
+            <span class="store-hours">${s.hoursLabel}</span>
+          </div>
+          <h2>${s.storeName.cn}</h2>
+          <p class="store-tag">${s.tagline}</p>
+          <p class="store-addr">${s.address}</p>
+          <div class="store-meta">
+            <span>${s.bedCount} 床</span>
+            <span>${s.overnight ? '跨夜营业' : '当日营业'}</span>
+          </div>
+          <span class="entry-go">进入客服端 →</span>
+        </a>
+      `)
+      .join('');
+  </script>
+</body>
+</html>
