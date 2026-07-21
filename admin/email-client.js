@@ -1,32 +1,34 @@
 /**
- * 调用本机 / 云端邮件代发 API
+ * 调用本机通知网关：邮件 + Google 日历
  */
 (function (global) {
   function cfg() {
     return global.EMAIL_CONFIG || { apiBaseUrl: 'http://127.0.0.1:8787', apiKey: '' };
   }
 
+  function baseUrl() {
+    return String(cfg().apiBaseUrl || '').replace(/\/$/, '');
+  }
+
+  function headers() {
+    const h = { 'Content-Type': 'application/json' };
+    if (cfg().apiKey) h['x-api-key'] = cfg().apiKey;
+    return h;
+  }
+
   async function health() {
-    const base = String(cfg().apiBaseUrl || '').replace(/\/$/, '');
-    const res = await fetch(`${base}/health`);
-    if (!res.ok) throw new Error(`代发服务不可用 HTTP ${res.status}`);
+    const res = await fetch(`${baseUrl()}/health`);
+    if (!res.ok) throw new Error(`通知服务不可用 HTTP ${res.status}`);
     return res.json();
   }
 
-  /**
-   * @param {{ to: string, subject: string, text: string, chartDataUrl?: string, storeId?: string, bookingId?: string, eventType?: string }} payload
-   */
   async function sendMerchantMail(payload) {
-    const base = String(cfg().apiBaseUrl || '').replace(/\/$/, '');
-    if (!base) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
+    if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
     if (!payload || !payload.to) throw new Error('商家收件邮箱未配置');
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (cfg().apiKey) headers['x-api-key'] = cfg().apiKey;
-
-    const res = await fetch(`${base}/send`, {
+    const res = await fetch(`${baseUrl()}/send`, {
       method: 'POST',
-      headers,
+      headers: headers(),
       body: JSON.stringify(payload),
     });
     let data = null;
@@ -36,11 +38,32 @@
       data = null;
     }
     if (!res.ok || !data || !data.ok) {
-      const msg = (data && data.error) || `发送失败 HTTP ${res.status}`;
-      throw new Error(msg);
+      throw new Error((data && data.error) || `发送失败 HTTP ${res.status}`);
     }
     return data;
   }
 
-  global.EmailClient = { health, sendMerchantMail };
+  async function upsertCalendarEvent(payload) {
+    if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
+    if (!payload || !payload.calendarId) {
+      throw new Error('未配置门店 googleCalendarId（先 npm run list-calendars 再填 stores.js）');
+    }
+    const res = await fetch(`${baseUrl()}/calendar/upsert`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(payload),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || `日历同步失败 HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  global.EmailClient = { health, sendMerchantMail, upsertCalendarEvent };
 })(window);

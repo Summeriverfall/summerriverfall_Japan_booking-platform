@@ -691,10 +691,75 @@
     return { subject, body, chartDataUrl: buildStatusChartImage(booking.date, booking.id) };
   }
 
+  function addDaysYmd(dateStr, days) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  function formatUsShortDate(dateStr) {
+    const [y, m, d] = dateStr.split('-');
+    return `${Number(m)}/${Number(d)}`;
+  }
+
+  /** 对齐现有 Google 日历手工录入格式 */
+  function buildCalendarDraft(booking, eventType) {
+    const cfg = STORE_CONFIG;
+    const course = cfg.courses.find((c) => c.id === booking.courseId);
+    const courseName = course ? course.name.split('/')[0].trim() : 'Service';
+    const beds = (booking.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+    const endTime = BookingStore.offsetToTime(
+      BookingStore.timeToOffset(booking.startTime) + booking.durationMinutes
+    );
+    const [sh] = booking.startTime.split(':').map(Number);
+    const [eh] = endTime.split(':').map(Number);
+    // 结束钟点早于开始 → 跨自然日（如 23:00–01:00）
+    const endDate = eh < sh ? addDaysYmd(booking.date, 1) : booking.date;
+
+    const summary = `${booking.guests || 1}人，${booking.durationMinutes}分钟${courseName}`;
+    const head =
+      eventType === 'reschedule'
+        ? 'Your appointment has been updated.'
+        : 'Your appointment has been confirmed.';
+    const description = [
+      head,
+      `SHOP: ${cfg.storeName.en || cfg.storeName.cn}`,
+      `Name: ${booking.guestName || '-'}`,
+      `Time: ${formatUsShortDate(booking.date)}, ${booking.startTime}`,
+      `Number of Guests: ${booking.guests || 1}`,
+      `Service: ${course ? course.name : '-'} ${booking.durationMinutes} min`,
+      `Contact (WhatsApp): ${booking.guestPhone || '-'}`,
+      `Beds: ${beds || '-'}`,
+      `Channel: ${(cfg.channels.find((c) => c.id === booking.channelId) || {}).name || '-'}`,
+      `Booking ID: ${booking.id}`,
+      booking.note ? `Note: ${booking.note}` : null,
+      booking.price != null && booking.price !== '' ? `Price: ${booking.price}` : null,
+      'We look forward to welcoming you.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    return {
+      calendarId: cfg.googleCalendarId || '',
+      calendarName: cfg.googleCalendarName || cfg.storeName.cn,
+      eventId: booking.googleEventId || null,
+      summary,
+      description,
+      startDateTime: `${booking.date}T${booking.startTime}:00`,
+      endDateTime: `${endDate}T${endTime}:00`,
+      timeZone: cfg.timeZone || 'Asia/Tokyo',
+    };
+  }
+
   global.BoardUI = {
     renderBoard,
     buildStatusChartImage,
     buildEmailDraft,
+    buildCalendarDraft,
     hourLabels,
     hourSlots,
     hourSlotMeta,

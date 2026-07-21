@@ -1,11 +1,12 @@
 /**
- * Gmail SMTP 代发服务
- * 密码只放在本机 .env，不要提交到 Git。
+ * 通知网关：Gmail SMTP + Google Calendar
+ * 密钥只放本机 .env，不要提交到 Git。
  */
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
+const calendar = require('./calendar');
 
 const PORT = Number(process.env.PORT || 8787);
 const GMAIL_USER = process.env.GMAIL_USER || '';
@@ -17,7 +18,10 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*')
   .filter(Boolean);
 
 if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
-  console.warn('[mailer] 缺少 GMAIL_USER / GMAIL_APP_PASSWORD，请复制 .env.example 为 .env 并填写。');
+  console.warn('[gateway] 缺少 GMAIL_USER / GMAIL_APP_PASSWORD');
+}
+if (!calendar.isConfigured()) {
+  console.warn('[gateway] 尚未配置 Google Calendar OAuth（可先发信，稍后再配日历）');
 }
 
 const transporter = nodemailer.createTransport({
@@ -60,10 +64,75 @@ function requireApiKey(req, res, next) {
 app.get('/health', (_req, res) => {
   res.json({
     ok: true,
-    service: 'booking-mailer',
+    service: 'booking-notify-gateway',
     gmailConfigured: Boolean(GMAIL_USER && GMAIL_APP_PASSWORD),
+    calendarConfigured: calendar.isConfigured(),
     from: GMAIL_USER || null,
   });
+});
+
+app.get('/calendar/list', requireApiKey, async (_req, res) => {
+  try {
+    const items = await calendar.listCalendars();
+    res.json({ ok: true, items });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+/**
+ * POST /calendar/upsert
+ * body: {
+ *   calendarId, eventId?, summary, description,
+ *   startDateTime, endDateTime, timeZone?
+ * }
+ */
+app.post('/calendar/upsert', requireApiKey, async (req, res) => {
+  try {
+    const {
+      calendarId,
+      eventId,
+      summary,
+      description,
+      startDateTime,
+      endDateTime,
+      timeZone,
+    } = req.body || {};
+    if (!calendarId || !summary || !startDateTime || !endDateTime) {
+      res.status(400).json({
+        ok: false,
+        error: '缺少 calendarId / summary / startDateTime / endDateTime',
+      });
+      return;
+    }
+    const result = await calendar.upsertEvent({
+      calendarId,
+      eventId,
+      summary,
+      description: description || '',
+      startDateTime,
+      endDateTime,
+      timeZone: timeZone || 'Asia/Tokyo',
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[calendar] upsert failed', err);
+    res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+app.post('/calendar/delete', requireApiKey, async (req, res) => {
+  try {
+    const { calendarId, eventId } = req.body || {};
+    if (!eventId) {
+      res.status(400).json({ ok: false, error: '缺少 eventId' });
+      return;
+    }
+    await calendar.deleteEvent(calendarId || 'primary', eventId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
 });
 
 /**
@@ -140,6 +209,8 @@ function escapeHtml(s) {
 }
 
 app.listen(PORT, () => {
-  console.log(`[mailer] Gmail SMTP relay listening on http://127.0.0.1:${PORT}`);
-  console.log(`[mailer] from=${GMAIL_USER || '(未配置)'}  health=http://127.0.0.1:${PORT}/health`);
+  console.log(`[gateway] listening on http://127.0.0.1:${PORT}`);
+  console.log(
+    `[gateway] gmail=${Boolean(GMAIL_USER && GMAIL_APP_PASSWORD)} calendar=${calendar.isConfigured()}`
+  );
 });

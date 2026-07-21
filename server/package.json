@@ -1,12 +1,14 @@
 {
-  "name": "booking-platform-mailer",
-  "version": "1.0.0",
+  "name": "booking-platform-notify-gateway",
+  "version": "1.1.0",
   "private": true,
-  "description": "Gmail SMTP relay for Japan booking platform",
+  "description": "Gmail SMTP + Google Calendar gateway for Japan booking platform",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "auth-google": "node auth-google.js",
+    "list-calendars": "node list-calendars.js"
   },
   "engines": {
     "node": ">=18"
@@ -15,6 +17,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "googleapis": "^144.0.0",
     "nodemailer": "^6.9.16"
   }
 }

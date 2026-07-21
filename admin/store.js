@@ -482,6 +482,18 @@
     save(state);
   }
 
+  function setGoogleEvent(bookingId, meta) {
+    const state = load();
+    const b = state.bookings.find((x) => x.id === bookingId);
+    if (!b) return { ok: false, error: '找不到订单' };
+    b.googleEventId = meta && meta.eventId ? meta.eventId : null;
+    b.googleEventLink = meta && meta.htmlLink ? meta.htmlLink : null;
+    b.googleCalendarId = meta && meta.calendarId ? meta.calendarId : b.googleCalendarId || null;
+    b.googleSyncedAt = new Date().toISOString();
+    save(state);
+    return { ok: true, booking: b };
+  }
+
   function exportJson() {
     return JSON.stringify(load(), null, 2);
   }
@@ -524,6 +536,7 @@
     listBookings,
     listClosures,
     appendEmailLog,
+    setGoogleEvent,
     exportJson,
     importJson,
     resetAll,

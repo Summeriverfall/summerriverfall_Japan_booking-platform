@@ -221,20 +221,25 @@
 
   function showEmail(booking, eventType) {
     const draft = BoardUI.buildEmailDraft(booking, eventType);
+    const calDraft = BoardUI.buildCalendarDraft(booking, eventType);
     const to = STORE_CONFIG.merchantEmail || '';
+    const calHint = STORE_CONFIG.googleCalendarId
+      ? `日历：${escapeHtml(STORE_CONFIG.googleCalendarName || STORE_CONFIG.googleCalendarId)}`
+      : '日历：尚未配置 googleCalendarId';
     emailBox.innerHTML = `
       <div><strong>主题：</strong>${escapeHtml(draft.subject)}</div>
       <div class="hint" style="margin-top:.35rem">发件：${escapeHtml(
         (window.EMAIL_CONFIG && window.EMAIL_CONFIG.fromLabel) || 'summerriverfall@gmail.com'
-      )} → 收件：${escapeHtml(to || '（待配置商家邮箱）')}</div>
+      )} → 收件：${escapeHtml(to || '（待配置商家邮箱）')} · ${calHint}</div>
+      <div class="hint" style="margin-top:.25rem">日历标题预览：${escapeHtml(calDraft.summary)}</div>
       <pre>${escapeHtml(draft.body)}</pre>
       <div class="hint">床位使用时段状态图（将随邮件发送）：</div>
       <img alt="床位状态图" src="${draft.chartDataUrl}">
       <div class="actions" style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
-        <button class="btn primary" type="button" id="btnSendMail">发送给商家</button>
+        <button class="btn primary" type="button" id="btnSendMail">发送邮件并同步日历</button>
         <a class="btn" download="bed-status-${booking.date}.png" href="${draft.chartDataUrl}">下载状态图</a>
         <button class="btn" type="button" id="btnCopyMail">复制邮件正文</button>
-        <span class="hint" id="mailSendStatus">需本机运行 server 代发服务</span>
+        <span class="hint" id="mailSendStatus">需本机运行 server 通知网关</span>
       </div>
     `;
     const statusEl = document.getElementById('mailSendStatus');
@@ -248,51 +253,72 @@
     const btnSend = document.getElementById('btnSendMail');
     if (btnSend) {
       btnSend.addEventListener('click', async () => {
-        if (!to) {
-          statusEl.className = 'err';
-          statusEl.textContent = '未配置商家收件邮箱（stores.js → merchantEmail）';
-          return;
-        }
         if (!window.EmailClient) {
           statusEl.className = 'err';
-          statusEl.textContent = '邮件客户端未加载';
+          statusEl.textContent = '通知客户端未加载';
           return;
         }
         btnSend.disabled = true;
+        const parts = [];
         statusEl.className = 'hint';
-        statusEl.textContent = '发送中…';
-        try {
-          const result = await EmailClient.sendMerchantMail({
-            to,
-            subject: draft.subject,
-            text: draft.body,
-            chartDataUrl: draft.chartDataUrl,
-            storeId: STORE_CONFIG.storeId,
-            bookingId: booking.id,
-            eventType,
-          });
-          statusEl.className = 'hint ok';
-          statusEl.textContent = `已发送（${result.messageId || 'ok'}）→ ${to}`;
-          BookingStore.appendEmailLog(booking.id, {
-            eventType,
-            mode: 'smtp_sent',
-            to,
-            messageId: result.messageId || null,
-          });
-        } catch (err) {
-          statusEl.className = 'err';
-          statusEl.textContent =
-            (err && err.message) ||
-            '发送失败。请确认已 npm start 启动 server，且 .env 已填 Gmail 应用密码。';
-          BookingStore.appendEmailLog(booking.id, {
-            eventType,
-            mode: 'smtp_failed',
-            to,
-            error: (err && err.message) || String(err),
-          });
-        } finally {
-          btnSend.disabled = false;
+        statusEl.textContent = '处理中…';
+
+        // 1) 邮件
+        if (!to) {
+          parts.push('邮件跳过（未配置收件）');
+        } else {
+          try {
+            statusEl.textContent = '发送邮件中…';
+            const result = await EmailClient.sendMerchantMail({
+              to,
+              subject: draft.subject,
+              text: draft.body,
+              chartDataUrl: draft.chartDataUrl,
+              storeId: STORE_CONFIG.storeId,
+              bookingId: booking.id,
+              eventType,
+            });
+            parts.push(`邮件已发（${result.messageId || 'ok'}）`);
+            BookingStore.appendEmailLog(booking.id, {
+              eventType,
+              mode: 'smtp_sent',
+              to,
+              messageId: result.messageId || null,
+            });
+          } catch (err) {
+            parts.push(`邮件失败：${(err && err.message) || err}`);
+            BookingStore.appendEmailLog(booking.id, {
+              eventType,
+              mode: 'smtp_failed',
+              to,
+              error: (err && err.message) || String(err),
+            });
+          }
         }
+
+        // 2) Google 日历
+        try {
+          statusEl.textContent = '同步 Google 日历中…';
+          const latest = BookingStore.listBookings(booking.date).find((x) => x.id === booking.id) || booking;
+          const cal = BoardUI.buildCalendarDraft(latest, eventType);
+          const calResult = await EmailClient.upsertCalendarEvent(cal);
+          BookingStore.setGoogleEvent(booking.id, {
+            eventId: calResult.eventId,
+            htmlLink: calResult.htmlLink,
+            calendarId: cal.calendarId,
+          });
+          parts.push(
+            `日历已${calResult.mode === 'updated' ? '更新' : '创建'}` +
+              (calResult.htmlLink ? ` <a href="${calResult.htmlLink}" target="_blank" rel="noopener">打开</a>` : '')
+          );
+        } catch (err) {
+          parts.push(`日历失败：${(err && err.message) || err}`);
+        }
+
+        const hasFail = parts.some((p) => p.includes('失败'));
+        statusEl.className = hasFail ? 'err' : 'hint ok';
+        statusEl.innerHTML = parts.join(' · ');
+        btnSend.disabled = false;
       });
     }
     BookingStore.appendEmailLog(booking.id, { eventType, mode: 'preview_only' });
