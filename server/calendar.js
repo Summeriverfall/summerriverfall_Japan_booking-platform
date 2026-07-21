@@ -91,12 +91,21 @@ async function listCalendars() {
 async function upsertEvent(input) {
   const cal = calendarApi();
   const calendarId = input.calendarId || 'primary';
-  const timeZone = input.timeZone || 'Asia/Tokyo';
+  const timeZone = input.timeZone || 'Asia/Shanghai';
+  // dateTime 若已含 ±HH:MM 偏移，则按该绝对时间写入；timeZone 仅作展示辅助
+  const start = { dateTime: input.startDateTime };
+  const end = { dateTime: input.endDateTime };
+  if (!/[+-]\d{2}:\d{2}$/.test(String(input.startDateTime || ''))) {
+    start.timeZone = timeZone;
+  }
+  if (!/[+-]\d{2}:\d{2}$/.test(String(input.endDateTime || ''))) {
+    end.timeZone = timeZone;
+  }
   const body = {
     summary: input.summary,
     description: input.description,
-    start: { dateTime: input.startDateTime, timeZone },
-    end: { dateTime: input.endDateTime, timeZone },
+    start,
+    end,
   };
 
   if (input.eventId) {

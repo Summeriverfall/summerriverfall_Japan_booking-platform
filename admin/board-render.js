@@ -726,6 +726,10 @@
     // 结束钟点早于开始 → 跨自然日（如 23:00–01:00）
     const endDate = eh < sh ? addDaysYmd(booking.date, 1) : booking.date;
 
+    // 客服多在中国时区看日历：写入时带 +08:00，保证「填 15:00 → 日历显示 15:00」
+    // （若只写 Asia/Tokyo，中国区查看会整体早 1 小时）
+    const writeTz = cfg.googleWriteTimeZone || 'Asia/Shanghai';
+    const offset = writeTz === 'Asia/Tokyo' ? '+09:00' : '+08:00';
     const summary = `${booking.guests || 1}人，${booking.durationMinutes}分钟${courseName}`;
     const head =
       eventType === 'reschedule'
@@ -733,9 +737,6 @@
         : eventType === 'cancel'
           ? 'Your appointment has been cancelled.'
           : 'Your appointment has been confirmed.';
-    // 写入 Google 的时区：默认用 googleWriteTimeZone，保证「表单填几点，日历就显示几点」
-    // （客服多在中国时区查看；若用 Asia/Tokyo 会在日历上整体早 1 小时）
-    const writeTz = cfg.googleWriteTimeZone || cfg.timeZone || 'Asia/Shanghai';
     const description = [
       head,
       `SHOP: ${cfg.storeName.en || cfg.storeName.cn}`,
@@ -760,8 +761,9 @@
       eventId: booking.googleEventId || null,
       summary,
       description,
-      startDateTime: `${booking.date}T${booking.startTime}:00`,
-      endDateTime: `${endDate}T${endTime}:00`,
+      // 带明确偏移，避免被日历默认「日本时区」改写
+      startDateTime: `${booking.date}T${booking.startTime}:00${offset}`,
+      endDateTime: `${endDate}T${endTime}:00${offset}`,
       timeZone: writeTz,
     };
   }
