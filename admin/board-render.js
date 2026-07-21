@@ -759,6 +759,8 @@
       calendarId: cfg.googleCalendarId || '',
       calendarName: cfg.googleCalendarName || cfg.storeName.cn,
       eventId: booking.googleEventId || null,
+      bookingId: booking.id || null,
+      storeId: cfg.storeId || null,
       summary,
       description,
       // 带明确偏移，避免被日历默认「日本时区」改写

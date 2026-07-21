@@ -4,6 +4,8 @@
 const net = require('net');
 const { google } = require('googleapis');
 
+const PLATFORM_SOURCE = 'booking-platform';
+
 function canConnect(port, host = '127.0.0.1') {
   return new Promise((resolve) => {
     const socket = net.connect({ port, host }, () => {
@@ -33,7 +35,6 @@ async function ensureProxy() {
   }
 }
 
-// 启动时尽量挂上代理（googleapis 会读 HTTPS_PROXY）
 ensureProxy().catch(() => {});
 
 function getOAuthClient() {
@@ -76,23 +77,8 @@ async function listCalendars() {
   }));
 }
 
-/**
- * 创建或更新事件
- * @param {{
- *   calendarId: string,
- *   eventId?: string|null,
- *   summary: string,
- *   description: string,
- *   startDateTime: string,
- *   endDateTime: string,
- *   timeZone?: string,
- * }} input
- */
-async function upsertEvent(input) {
-  const cal = calendarApi();
-  const calendarId = input.calendarId || 'primary';
+function buildEventBody(input) {
   const timeZone = input.timeZone || 'Asia/Shanghai';
-  // dateTime 若已含 ±HH:MM 偏移，则按该绝对时间写入；timeZone 仅作展示辅助
   const start = { dateTime: input.startDateTime };
   const end = { dateTime: input.endDateTime };
   if (!/[+-]\d{2}:\d{2}$/.test(String(input.startDateTime || ''))) {
@@ -103,27 +89,135 @@ async function upsertEvent(input) {
   }
   const body = {
     summary: input.summary,
-    description: input.description,
+    description: input.description || '',
     start,
     end,
   };
+  if (input.bookingId || input.storeId) {
+    body.extendedProperties = {
+      private: {
+        source: PLATFORM_SOURCE,
+        bookingId: String(input.bookingId || ''),
+        storeId: String(input.storeId || ''),
+      },
+    };
+  }
+  return body;
+}
 
-  if (input.eventId) {
+/** 列出某日历在时间窗内的事件（含扩展属性） */
+async function listEventsInRange(calendarId, timeMin, timeMax) {
+  const cal = calendarApi();
+  const items = [];
+  let pageToken;
+  do {
+    // eslint-disable-next-line no-await-in-loop
+    const res = await cal.events.list({
+      calendarId: calendarId || 'primary',
+      timeMin,
+      timeMax,
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 250,
+      pageToken,
+    });
+    items.push(...(res.data.items || []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+  return items;
+}
+
+function eventMatchesBooking(ev, bookingId) {
+  if (!bookingId) return false;
+  const priv = (ev.extendedProperties && ev.extendedProperties.private) || {};
+  if (priv.bookingId && String(priv.bookingId) === String(bookingId)) return true;
+  const desc = String(ev.description || '');
+  return desc.includes(`Booking ID: ${bookingId}`);
+}
+
+function isPlatformEvent(ev) {
+  const priv = (ev.extendedProperties && ev.extendedProperties.private) || {};
+  if (priv.source === PLATFORM_SOURCE) return true;
+  const desc = String(ev.description || '');
+  return /Booking ID:\s*\S+/.test(desc) || /We look forward to welcoming you/.test(desc);
+}
+
+/**
+ * 查找同一 bookingId 的已有事件，返回 ids（可能多个重复）
+ */
+async function findEventsForBooking(calendarId, bookingId, aroundDateTime) {
+  if (!bookingId) return [];
+  const cal = calendarApi();
+
+  // 1) 扩展属性精确查
+  try {
+    const res = await cal.events.list({
+      calendarId: calendarId || 'primary',
+      privateExtendedProperty: `bookingId=${bookingId}`,
+      maxResults: 50,
+      singleEvents: true,
+    });
+    const byProp = res.data.items || [];
+    if (byProp.length) return byProp;
+  } catch (_) {
+    /* 旧事件可能无扩展属性 */
+  }
+
+  // 2) 在前后几天描述里搜 Booking ID
+  const center = aroundDateTime ? new Date(aroundDateTime) : new Date();
+  const timeMin = new Date(center.getTime() - 2 * 24 * 3600 * 1000).toISOString();
+  const timeMax = new Date(center.getTime() + 3 * 24 * 3600 * 1000).toISOString();
+  const windowItems = await listEventsInRange(calendarId, timeMin, timeMax);
+  return windowItems.filter((ev) => eventMatchesBooking(ev, bookingId));
+}
+
+/**
+ * 创建或更新；同一 bookingId 只保留一条，多余删除
+ */
+async function upsertEvent(input) {
+  const cal = calendarApi();
+  const calendarId = input.calendarId || 'primary';
+  const body = buildEventBody(input);
+  const bookingId = input.bookingId || '';
+
+  const existing = await findEventsForBooking(
+    calendarId,
+    bookingId,
+    input.startDateTime
+  );
+  let primaryId = input.eventId || null;
+  if (!primaryId && existing.length) {
+    primaryId = existing[0].id;
+  }
+
+  // 删掉同单号的其它重复
+  const toDelete = existing.filter((ev) => ev.id !== primaryId);
+  for (const ev of toDelete) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await cal.events.delete({ calendarId, eventId: ev.id });
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  if (primaryId) {
     try {
       const updated = await cal.events.update({
         calendarId,
-        eventId: input.eventId,
+        eventId: primaryId,
         requestBody: body,
       });
       return {
         ok: true,
-        mode: 'updated',
+        mode: existing.length > 1 ? 'updated_deduped' : 'updated',
         eventId: updated.data.id,
         htmlLink: updated.data.htmlLink,
+        removedDuplicates: toDelete.length,
       };
     } catch (err) {
-      // 事件被删或不存在 → 新建
       if (!(err && (err.code === 404 || err.status === 404))) throw err;
+      primaryId = null;
     }
   }
 
@@ -136,6 +230,7 @@ async function upsertEvent(input) {
     mode: 'created',
     eventId: created.data.id,
     htmlLink: created.data.htmlLink,
+    removedDuplicates: toDelete.length,
   };
 }
 
@@ -149,9 +244,48 @@ async function deleteEvent(calendarId, eventId) {
 }
 
 /**
- * 按名称查找或创建日历，并设置颜色（Google 月视图里不同店=不同色点）
- * colorId: Google 预设 1–24，见 https://developers.google.com/calendar/api/v3/reference/colors
+ * 按 bookingId 删除（含重复）
  */
+async function deleteByBookingId(calendarId, bookingId, aroundDateTime) {
+  const list = await findEventsForBooking(calendarId, bookingId, aroundDateTime);
+  const cal = calendarApi();
+  let removed = 0;
+  for (const ev of list) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await cal.events.delete({ calendarId: calendarId || 'primary', eventId: ev.id });
+      removed += 1;
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  return { ok: true, removed };
+}
+
+/**
+ * 清理某日本平台写入的事件（测试/重复堆叠）
+ * 不会删非本平台手工事件（无 Booking ID / source 标记的）
+ */
+async function cleanupPlatformDay(calendarId, dateStr) {
+  const timeMin = `${dateStr}T00:00:00+08:00`;
+  const timeMax = `${dateStr}T23:59:59+08:00`;
+  const items = await listEventsInRange(calendarId, timeMin, timeMax);
+  const cal = calendarApi();
+  let removed = 0;
+  for (const ev of items) {
+    if (!isPlatformEvent(ev)) continue;
+    // 保留「时区校验」也可删；用户要清干净
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await cal.events.delete({ calendarId, eventId: ev.id });
+      removed += 1;
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  return { ok: true, removed };
+}
+
 async function ensureNamedCalendar(summary, colorId) {
   const cal = calendarApi();
   const list = await cal.calendarList.list({ maxResults: 250 });
@@ -163,7 +297,7 @@ async function ensureNamedCalendar(summary, colorId) {
     const created = await cal.calendars.insert({
       requestBody: {
         summary,
-        timeZone: 'Asia/Tokyo',
+        timeZone: 'Asia/Shanghai',
       },
     });
     const id = created.data.id;
@@ -198,5 +332,8 @@ module.exports = {
   listCalendars,
   upsertEvent,
   deleteEvent,
+  deleteByBookingId,
+  cleanupPlatformDay,
   ensureNamedCalendar,
+  PLATFORM_SOURCE,
 };

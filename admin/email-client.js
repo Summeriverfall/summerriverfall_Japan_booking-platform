@@ -67,13 +67,17 @@
 
   async function deleteCalendarEvent(payload) {
     if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
-    if (!payload || !payload.eventId) return { ok: true, skipped: true };
+    if (!payload || (!payload.eventId && !payload.bookingId)) {
+      return { ok: true, skipped: true };
+    }
     const res = await fetch(`${baseUrl()}/calendar/delete`, {
       method: 'POST',
       headers: headers(),
       body: JSON.stringify({
         calendarId: payload.calendarId || '',
-        eventId: payload.eventId,
+        eventId: payload.eventId || null,
+        bookingId: payload.bookingId || null,
+        aroundDateTime: payload.aroundDateTime || null,
       }),
     });
     let data = null;
@@ -88,10 +92,30 @@
     return data;
   }
 
+  async function cleanupCalendarDay(payload) {
+    if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
+    const res = await fetch(`${baseUrl()}/calendar/cleanup-day`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(payload),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || `日历清理失败 HTTP ${res.status}`);
+    }
+    return data;
+  }
+
   global.EmailClient = {
     health,
     sendMerchantMail,
     upsertCalendarEvent,
     deleteCalendarEvent,
+    cleanupCalendarDay,
   };
 })(window);

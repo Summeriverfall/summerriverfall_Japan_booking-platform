@@ -83,15 +83,18 @@ app.get('/calendar/list', requireApiKey, async (_req, res) => {
 /**
  * POST /calendar/upsert
  * body: {
- *   calendarId, eventId?, summary, description,
- *   startDateTime, endDateTime, timeZone?
+ *   calendarId, eventId?, bookingId?, storeId?,
+ *   summary, description, startDateTime, endDateTime, timeZone?
  * }
+ * 同一 bookingId 只保留一条，自动删掉重复旧事件
  */
 app.post('/calendar/upsert', requireApiKey, async (req, res) => {
   try {
     const {
       calendarId,
       eventId,
+      bookingId,
+      storeId,
       summary,
       description,
       startDateTime,
@@ -108,11 +111,13 @@ app.post('/calendar/upsert', requireApiKey, async (req, res) => {
     const result = await calendar.upsertEvent({
       calendarId,
       eventId,
+      bookingId,
+      storeId,
       summary,
       description: description || '',
       startDateTime,
       endDateTime,
-      timeZone: timeZone || 'Asia/Tokyo',
+      timeZone: timeZone || 'Asia/Shanghai',
     });
     res.json(result);
   } catch (err) {
@@ -123,13 +128,37 @@ app.post('/calendar/upsert', requireApiKey, async (req, res) => {
 
 app.post('/calendar/delete', requireApiKey, async (req, res) => {
   try {
-    const { calendarId, eventId } = req.body || {};
+    const { calendarId, eventId, bookingId, aroundDateTime } = req.body || {};
+    if (bookingId) {
+      const result = await calendar.deleteByBookingId(
+        calendarId || 'primary',
+        bookingId,
+        aroundDateTime
+      );
+      res.json(result);
+      return;
+    }
     if (!eventId) {
-      res.status(400).json({ ok: false, error: '缺少 eventId' });
+      res.status(400).json({ ok: false, error: '缺少 eventId 或 bookingId' });
       return;
     }
     await calendar.deleteEvent(calendarId || 'primary', eventId);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+/** 清理某日本平台写入的全部事件（去重/清测试用） */
+app.post('/calendar/cleanup-day', requireApiKey, async (req, res) => {
+  try {
+    const { calendarId, date } = req.body || {};
+    if (!calendarId || !date) {
+      res.status(400).json({ ok: false, error: '缺少 calendarId / date' });
+      return;
+    }
+    const result = await calendar.cleanupPlatformDay(calendarId, date);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || String(err) });
   }

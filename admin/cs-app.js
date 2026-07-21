@@ -176,13 +176,16 @@
   }
 
   async function removeGoogleEventForBooking(booking) {
-    if (!booking || !booking.googleEventId || !window.EmailClient) return { ok: true, skipped: true };
+    if (!booking || !window.EmailClient) return { ok: true, skipped: true };
+    if (!booking.googleEventId && !booking.id) return { ok: true, skipped: true };
     const calendarId =
       booking.googleCalendarId || STORE_CONFIG.googleCalendarId || '';
     try {
       await EmailClient.deleteCalendarEvent({
         calendarId,
-        eventId: booking.googleEventId,
+        eventId: booking.googleEventId || null,
+        bookingId: booking.id || null,
+        aroundDateTime: `${booking.date}T${booking.startTime}:00+08:00`,
       });
       BookingStore.setGoogleEvent(booking.id, {
         eventId: null,
@@ -390,7 +393,16 @@
               calendarId: cal.calendarId,
             });
             parts.push(
-              `日历已${calResult.mode === 'updated' ? '更新' : '创建'}` +
+              `日历已${
+                calResult.mode === 'created'
+                  ? '创建'
+                  : calResult.mode === 'updated_deduped'
+                    ? '更新并清理重复'
+                    : '更新'
+              }` +
+                (calResult.removedDuplicates
+                  ? `（删掉旧重复 ${calResult.removedDuplicates} 条）`
+                  : '') +
                 (calResult.htmlLink
                   ? ` <a href="${calResult.htmlLink}" target="_blank" rel="noopener">打开</a>`
                   : '')
