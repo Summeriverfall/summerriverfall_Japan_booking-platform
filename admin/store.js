@@ -174,6 +174,51 @@
     return n;
   }
 
+  /**
+   * 关床时段是否与已有预约（含预占/待确认）重叠。
+   * 产品规则：允许关，但 UI 应警告。
+   */
+  function findBookingConflictsForRange(dateStr, startTime, endTime, beds) {
+    const start = timeToOffset(startTime);
+    const end = timeToOffset(endTime);
+    if (!(end > start)) return [];
+    const bedSet = new Set((beds || []).map(Number));
+    const conflicts = [];
+    load()
+      .bookings.filter((b) => b.date === dateStr && b.status !== 'cancelled')
+      .forEach((b) => {
+        const bStart = timeToOffset(b.startTime);
+        const bEnd = bStart + b.durationMinutes;
+        if (!overlaps(start, end, bStart, bEnd)) return;
+        const hitBeds = (b.beds || []).filter((i) => bedSet.has(Number(i)));
+        if (!hitBeds.length) return;
+        conflicts.push({
+          booking: b,
+          beds: hitBeds,
+          startTime: b.startTime,
+          endTime: offsetToTime(bEnd),
+        });
+      });
+    return conflicts;
+  }
+
+  function formatBookingConflictWarning(conflicts) {
+    if (!conflicts || !conflicts.length) return '';
+    const lines = conflicts.slice(0, 5).map((c) => {
+      const beds = (c.beds || [])
+        .map((i) => CFG().bedLabels[i] || `${i + 1}号床`)
+        .join('、');
+      const name = c.booking.guestName || '未留名';
+      return `· ${beds} ${c.startTime}–${c.endTime}（${name}）`;
+    });
+    const more = conflicts.length > 5 ? `\n…另有 ${conflicts.length - 5} 笔` : '';
+    return (
+      `该关闭时段与已有预约重叠（共 ${conflicts.length} 笔）：\n` +
+      `${lines.join('\n')}${more}\n\n` +
+      `仍可关闭，但现场可能冲突。确定继续？`
+    );
+  }
+
   function createBooking(input) {
     const guests = Number(input.guests) || 1;
     const durationMinutes = Number(input.durationMinutes) || 60;
@@ -464,6 +509,8 @@
     isBedFree,
     findFreeBeds,
     remainingAt,
+    findBookingConflictsForRange,
+    formatBookingConflictWarning,
     createBooking,
     convertHoldToBooking,
     confirmBooking,

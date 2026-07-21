@@ -196,6 +196,17 @@
         );
       },
       onClosureLayoutChange: (patch) => {
+        if (
+          !confirmIfBookingConflict(
+            currentDate(),
+            patch.startTime,
+            patch.endTime,
+            patch.beds
+          )
+        ) {
+          refresh();
+          return;
+        }
         const r = BookingStore.updateClosure(patch.id, {
           startTime: patch.startTime,
           endTime: patch.endTime,
@@ -235,14 +246,29 @@
         endTimeEl.value = range.endTime;
         renderSideBeds(beds);
         const names = beds.map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}号床`).join('、');
-        sideErr.textContent = '';
-        formErr.className = 'hint ok';
-        formErr.textContent = `已选 ${names} · ${range.startTime}–${range.endTime}，请在菜单确认关闭。`;
+        const conflicts = BookingStore.findBookingConflictsForRange(
+          currentDate(),
+          range.startTime,
+          range.endTime,
+          beds
+        );
+        sideErr.textContent = conflicts.length
+          ? `注意：与 ${conflicts.length} 笔预约重叠，确认关闭时会再警告一次`
+          : '';
+        formErr.className = conflicts.length ? 'hint warn' : 'hint ok';
+        formErr.textContent = conflicts.length
+          ? `已选 ${names} · ${range.startTime}–${range.endTime}（与预约重叠，可关但会警告）`
+          : `已选 ${names} · ${range.startTime}–${range.endTime}，请在菜单确认关闭。`;
         remainHint.textContent = `选区：${names} · ${range.startTime}–${range.endTime}`;
-        openSide(`已选 ${names} · ${range.startTime}–${range.endTime}`, {
-          x: range.clientX,
-          y: range.clientY,
-        });
+        openSide(
+          conflicts.length
+            ? `已选 ${names} · 与预约重叠，确认时将警告`
+            : `已选 ${names} · ${range.startTime}–${range.endTime}`,
+          {
+            x: range.clientX,
+            y: range.clientY,
+          }
+        );
         refresh();
       },
     });
@@ -270,6 +296,17 @@
       : '<div class="hint">当日暂无手动关闭</div>';
   }
 
+  function confirmIfBookingConflict(date, startTime, endTime, beds) {
+    const conflicts = BookingStore.findBookingConflictsForRange(
+      date,
+      startTime,
+      endTime,
+      beds
+    );
+    if (!conflicts.length) return true;
+    return window.confirm(BookingStore.formatBookingConflictWarning(conflicts));
+  }
+
   function doCloseOrSave() {
     sideErr.textContent = '';
     formErr.textContent = '';
@@ -277,6 +314,17 @@
     if (!beds.length) {
       sideErr.textContent = '请勾选要关闭的床位';
       openSide();
+      return;
+    }
+
+    if (
+      !confirmIfBookingConflict(
+        currentDate(),
+        startTimeEl.value,
+        endTimeEl.value,
+        beds
+      )
+    ) {
       return;
     }
 
