@@ -20,36 +20,48 @@
   <main class="wrap">
     <div class="toolbar">
       <div class="field"><label>营业日</label><input type="date" id="dateInput"></div>
-      <button class="btn" type="button" id="btnRefresh">刷新</button>
+      <button class="btn" type="button" id="btnRefresh">刷新看板</button>
+      <span class="hint" id="remainHint"></span>
     </div>
 
     <div class="grid-stack">
       <section class="card card-board">
-        <h2>当前占用一览</h2>
-        <p class="hint">在空档上拖选床位+时段即可填入下方关床表单。灰色为已关闭；蓝/橙/紫为客服预约。</p>
+        <h2>床位时间轴（开关床）</h2>
+        <p class="hint">空档拖选可关闭；点击灰色「关」块选中后，可拖动移动，左右拉改时长，上下拉改床数。蓝/橙/紫为客服预约（只读）。</p>
         <div id="board"></div>
       </section>
 
       <section class="card card-form">
-        <h2>关闭床位时段</h2>
-        <p class="hint">在上方时间轴拖选要关的床+时段，或下方勾选床位后点确认。关闭后客服不可再约该段。</p>
-        <div class="toolbar">
-          <div class="field"><label>开始</label><input type="time" id="startTime" value="15:00"></div>
-          <div class="field"><label>结束</label><input type="time" id="endTime" value="17:00"></div>
-        </div>
-        <div class="field" style="margin-bottom:.6rem">
-          <label>关闭哪些床（必选；要关整列请勾「全部床位」）</label>
-          <div class="bed-checks" id="bedChecks"></div>
-        </div>
-        <div class="field" style="margin-bottom:.6rem"><label>原因</label><input id="reason" placeholder="如：散客 / 维护"></div>
-        <button class="btn primary" type="button" id="btnClose">确认关闭</button>
-        <div class="err" id="formErr"></div>
-
-        <h3>当日关闭记录</h3>
+        <h2>当日关闭记录</h2>
+        <p class="hint">与客服端同一套本店数据。也可在列表里直接释放。</p>
         <div class="list" id="closureList"></div>
+        <div class="err" id="formErr"></div>
       </section>
     </div>
   </main>
+
+  <!-- 与客服端一致：选中格旁的上下文菜单 -->
+  <div class="ctx-menu" id="sidePanel" aria-hidden="true" hidden>
+    <div class="ctx-menu-head">
+      <div>
+        <strong>关床编辑</strong>
+        <p class="hint" id="sideHint" style="margin:0">选中后可在此确认</p>
+      </div>
+      <button type="button" class="side-x" id="btnSideCloseTop" aria-label="关闭">×</button>
+    </div>
+    <div class="ctx-menu-body">
+      <div class="side-field"><label>开始</label><input id="startTime" type="time"></div>
+      <div class="side-field"><label>结束</label><input id="endTime" type="time"></div>
+      <div class="side-field"><label>关闭哪些床</label><div class="bed-checks" id="sideBeds"></div></div>
+      <div class="side-field"><label>原因</label><input id="reason" placeholder="如：散客 / 维护"></div>
+      <div class="err" id="sideErr"></div>
+    </div>
+    <div class="ctx-menu-foot">
+      <button type="button" class="btn primary" id="btnClose">确认关闭</button>
+      <button type="button" class="btn danger" id="btnRelease" hidden>打开（释放）</button>
+      <button type="button" class="btn ghost" id="btnSideClose">关闭</button>
+    </div>
+  </div>
 
   <script src="stores.js"></script>
   <script src="store.js"></script>

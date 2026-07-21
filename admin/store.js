@@ -390,6 +390,34 @@
     return { ok: true, closure: c };
   }
 
+  function updateClosure(id, patch) {
+    const state = load();
+    const c = state.closures.find((x) => x.id === id && x.active !== false);
+    if (!c) return { ok: false, error: '找不到关闭记录' };
+
+    const startTime = patch.startTime != null ? patch.startTime : c.startTime;
+    const endTime = patch.endTime != null ? patch.endTime : c.endTime;
+    const start = timeToOffset(startTime);
+    const end = timeToOffset(endTime);
+    if (end <= start) return { ok: false, error: '结束时间必须晚于开始时间（注意跨午夜）' };
+
+    let beds = c.beds || [];
+    if (patch.beds && patch.beds.length) {
+      beds = [...new Set(patch.beds.map(Number))]
+        .filter((i) => Number.isFinite(i))
+        .sort((a, b) => a - b);
+    }
+    if (!beds.length) return { ok: false, error: '请至少保留一张床' };
+
+    c.startTime = startTime;
+    c.endTime = endTime;
+    c.beds = beds;
+    if (patch.reason != null) c.reason = String(patch.reason);
+    c.updatedAt = new Date().toISOString();
+    save(state);
+    return { ok: true, closure: c };
+  }
+
   function listBookings(dateStr) {
     return load()
       .bookings.filter((b) => b.date === dateStr)
@@ -445,6 +473,7 @@
     updateBookingInfo,
     setClosure,
     releaseClosure,
+    updateClosure,
     listBookings,
     listClosures,
     appendEmailLog,

@@ -313,11 +313,76 @@
                 return;
               }
               // 已选中：拖动手柄改尺寸，拖动本体改位置
-              startBookingEdit(x.ref, handle ? handle.dataset.handle : 'move', e);
+              startBlockEdit(
+                {
+                  id: x.ref.id,
+                  beds: x.ref.beds || [bed],
+                  startTime: x.ref.startTime,
+                  durationMinutes: x.ref.durationMinutes,
+                },
+                handle ? handle.dataset.handle : 'move',
+                e,
+                'booking'
+              );
             });
           }
 
-          if (opts.onBlockClick && x.type === 'closure') {
+          if (x.type === 'closure' && x.ref && x.ref.id) {
+            block.dataset.closureId = x.ref.id;
+            const bedsSorted = (x.ref.beds || [bed]).slice().sort((a, c) => a - c);
+            const selected = opts.selectedClosureId === x.ref.id;
+            if (selected) {
+              block.classList.add('is-selected');
+              [['w', '左'], ['e', '右']].forEach(([h]) => {
+                const hd = document.createElement('i');
+                hd.className = `blk-handle blk-handle-${h}`;
+                hd.dataset.handle = h;
+                block.appendChild(hd);
+              });
+              if (bed === bedsSorted[0]) {
+                const hd = document.createElement('i');
+                hd.className = 'blk-handle blk-handle-n';
+                hd.dataset.handle = 'n';
+                block.appendChild(hd);
+              }
+              if (bed === bedsSorted[bedsSorted.length - 1]) {
+                const hd = document.createElement('i');
+                hd.className = 'blk-handle blk-handle-s';
+                hd.dataset.handle = 's';
+                block.appendChild(hd);
+              }
+            }
+
+            block.addEventListener('pointerdown', (e) => {
+              if (e.button !== 0) return;
+              e.stopPropagation();
+              e.preventDefault();
+              if (!opts.onClosureSelect && !opts.onClosureLayoutChange) {
+                if (opts.onBlockClick) opts.onBlockClick(x);
+                return;
+              }
+              const handle = e.target.closest('.blk-handle');
+              if (opts.selectedClosureId !== x.ref.id) {
+                if (opts.onClosureSelect) {
+                  opts.onClosureSelect(x.ref, { clientX: e.clientX, clientY: e.clientY });
+                }
+                return;
+              }
+              const startOff = BookingStore.timeToOffset(x.ref.startTime);
+              const endOff = BookingStore.timeToOffset(x.ref.endTime);
+              startBlockEdit(
+                {
+                  id: x.ref.id,
+                  beds: x.ref.beds || [bed],
+                  startTime: x.ref.startTime,
+                  durationMinutes: endOff - startOff,
+                },
+                handle ? handle.dataset.handle : 'move',
+                e,
+                'closure'
+              );
+            });
+          } else if (opts.onBlockClick && x.type === 'closure') {
             block.addEventListener('click', (e) => {
               e.stopPropagation();
               opts.onBlockClick(x);
@@ -331,6 +396,7 @@
         if (e.target.closest('.board-block')) return;
         e.preventDefault();
         if (opts.onClearBookingSelect) opts.onClearBookingSelect();
+        if (opts.onClearClosureSelect) opts.onClearClosureSelect();
         const startOff = offsetFromClientX(track, e.clientX);
         activeDrag = { startBed: bed, startOff, curBed: bed, curOff: startOff };
         wrap.classList.add('is-dragging');
@@ -345,14 +411,15 @@
       wrap.appendChild(row);
     }
 
-    function startBookingEdit(booking, mode, e) {
-      const beds0 = (booking.beds || []).slice().sort((a, c) => a - c);
-      const start0 = BookingStore.timeToOffset(booking.startTime);
-      const end0 = start0 + booking.durationMinutes;
+    function startBlockEdit(block, mode, e, kind) {
+      const beds0 = (block.beds || []).slice().sort((a, c) => a - c);
+      const start0 = BookingStore.timeToOffset(block.startTime);
+      const end0 = start0 + block.durationMinutes;
       const originOff = anyTrackFromClientX(e.clientX);
       const originBed = bedFromClientY(e.clientY);
       const edit = {
-        id: booking.id,
+        id: block.id,
+        kind,
         mode,
         start0,
         end0,
@@ -361,11 +428,12 @@
         originBed,
       };
       wrap.classList.add('is-editing-block');
+      const idAttr = kind === 'closure' ? 'data-closure-id' : 'data-booking-id';
 
       function applyPreview(startOff, endOff, beds) {
         const b0 = Math.min(...beds);
         const b1 = Math.max(...beds);
-        wrap.querySelectorAll(`.board-block[data-booking-id="${booking.id}"]`).forEach((el) => {
+        wrap.querySelectorAll(`.board-block[${idAttr}="${block.id}"]`).forEach((el) => {
           el.style.opacity = '0.3';
         });
         paintBedsRange(b0, b1, startOff, Math.max(startOff, endOff - snap));
@@ -425,16 +493,22 @@
         window.removeEventListener('pointercancel', onEditEnd);
         wrap.classList.remove('is-editing-block');
         const p = edit.preview;
-        if (!p || !opts.onBookingLayoutChange) return;
-        opts.onBookingLayoutChange({
+        if (!p) return;
+        const payload = {
           id: edit.id,
           startTime: BookingStore.offsetToTime(p.startOff),
+          endTime: BookingStore.offsetToTime(p.endOff),
           durationMinutes: p.endOff - p.startOff,
           beds: p.beds,
           guests: p.beds.length,
           clientX: e.clientX,
           clientY: e.clientY,
-        });
+        };
+        if (kind === 'closure') {
+          if (opts.onClosureLayoutChange) opts.onClosureLayoutChange(payload);
+        } else if (opts.onBookingLayoutChange) {
+          opts.onBookingLayoutChange(payload);
+        }
       }
 
       applyPreview(start0, end0, beds0);
