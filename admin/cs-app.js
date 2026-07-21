@@ -156,11 +156,83 @@
       lastPointer = { x: point.x, y: point.y };
     }
     const createBtn = document.getElementById('btnCreate');
+    const holdBtn = document.getElementById('btnHold');
+    const deleteBtn = document.getElementById('btnDeleteBooking');
     if (createBtn) {
       createBtn.textContent = selectedBookingId ? '保存修改' : '创建预约';
     }
+    if (holdBtn) holdBtn.hidden = Boolean(selectedBookingId);
+    if (deleteBtn) {
+      deleteBtn.hidden = !selectedBookingId;
+      deleteBtn.textContent =
+        selectedBookingId &&
+        (BookingStore.load().bookings.find((b) => b.id === selectedBookingId) || {}).status ===
+          'hold'
+          ? '释放预占'
+          : '删除预约';
+    }
     // 等 DOM/勾选床位渲染后再定位，避免贴边计算偏差
     requestAnimationFrame(() => placeCtxMenu());
+  }
+
+  async function removeGoogleEventForBooking(booking) {
+    if (!booking || !booking.googleEventId || !window.EmailClient) return { ok: true, skipped: true };
+    const calendarId =
+      booking.googleCalendarId || STORE_CONFIG.googleCalendarId || '';
+    try {
+      await EmailClient.deleteCalendarEvent({
+        calendarId,
+        eventId: booking.googleEventId,
+      });
+      BookingStore.setGoogleEvent(booking.id, {
+        eventId: null,
+        htmlLink: null,
+        calendarId: null,
+      });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: (err && err.message) || String(err) };
+    }
+  }
+
+  async function doDeleteBooking(bookingId) {
+    const id = bookingId || selectedBookingId;
+    if (!id) return;
+    const state = BookingStore.load();
+    const booking = state.bookings.find((b) => b.id === id);
+    if (!booking) return;
+    const isHold = booking.status === 'hold';
+    if (
+      !confirm(
+        isHold
+          ? '释放该预占？若已同步日历将一并删除。'
+          : '确认删除该预约？将从看板移除，并删除对应 Google 日历事件。'
+      )
+    ) {
+      return;
+    }
+
+    const cal = await removeGoogleEventForBooking(booking);
+    const r = BookingStore.cancelBooking(id, isHold ? '释放预占' : '客服删除');
+    if (!r.ok) {
+      alert(r.error || '删除失败');
+      return;
+    }
+    selectedBookingId = null;
+    rangeSelection = null;
+    closeSide();
+    refresh();
+    formErr.className = cal.ok ? 'hint ok' : 'hint warn';
+    formErr.textContent = cal.ok
+      ? isHold
+        ? '已释放预占，日历已同步删除（如有）。'
+        : '已删除预约，Google 日历已同步删除（如有）。'
+      : `已删除预约，但日历删除失败：${cal.error}（可稍后在日历手动删）`;
+    if (!isHold && booking.status === 'confirmed') {
+      // 可选：生成取消邮件预览，方便通知商家
+      const cancelled = Object.assign({}, booking, { status: 'cancelled' });
+      showEmail(cancelled, 'cancel');
+    }
   }
 
   function closeSide() {
@@ -231,12 +303,18 @@
       <div class="hint" style="margin-top:.35rem">发件：${escapeHtml(
         (window.EMAIL_CONFIG && window.EMAIL_CONFIG.fromLabel) || 'summerriverfall@gmail.com'
       )} → 收件：${escapeHtml(to || '（待配置商家邮箱）')} · ${calHint}</div>
-      <div class="hint" style="margin-top:.25rem">日历标题预览：${escapeHtml(calDraft.summary)}</div>
+      <div class="hint" style="margin-top:.25rem">${
+        eventType === 'cancel'
+          ? '删除时已尝试同步移除日历事件；此处可再发取消邮件通知商家'
+          : `日历标题预览：${escapeHtml(calDraft.summary)}`
+      }</div>
       <pre>${escapeHtml(draft.body)}</pre>
       <div class="hint">床位使用时段状态图（将随邮件发送）：</div>
       <img alt="床位状态图" src="${draft.chartDataUrl}">
       <div class="actions" style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
-        <button class="btn primary" type="button" id="btnSendMail">发送邮件并同步日历</button>
+        <button class="btn primary" type="button" id="btnSendMail">${
+          eventType === 'cancel' ? '发送取消邮件' : '发送邮件并同步日历'
+        }</button>
         <a class="btn" download="bed-status-${booking.date}.png" href="${draft.chartDataUrl}">下载状态图</a>
         <button class="btn" type="button" id="btnCopyMail">复制邮件正文</button>
         <span class="hint" id="mailSendStatus">需本机运行 server 通知网关</span>
@@ -297,22 +375,29 @@
         }
 
         // 2) Google 日历
-        try {
-          statusEl.textContent = '同步 Google 日历中…';
-          const latest = BookingStore.listBookings(booking.date).find((x) => x.id === booking.id) || booking;
-          const cal = BoardUI.buildCalendarDraft(latest, eventType);
-          const calResult = await EmailClient.upsertCalendarEvent(cal);
-          BookingStore.setGoogleEvent(booking.id, {
-            eventId: calResult.eventId,
-            htmlLink: calResult.htmlLink,
-            calendarId: cal.calendarId,
-          });
-          parts.push(
-            `日历已${calResult.mode === 'updated' ? '更新' : '创建'}` +
-              (calResult.htmlLink ? ` <a href="${calResult.htmlLink}" target="_blank" rel="noopener">打开</a>` : '')
-          );
-        } catch (err) {
-          parts.push(`日历失败：${(err && err.message) || err}`);
+        if (eventType === 'cancel') {
+          parts.push('日历已在删除时同步移除');
+        } else {
+          try {
+            statusEl.textContent = '同步 Google 日历中…';
+            const latest =
+              BookingStore.listBookings(booking.date).find((x) => x.id === booking.id) || booking;
+            const cal = BoardUI.buildCalendarDraft(latest, eventType);
+            const calResult = await EmailClient.upsertCalendarEvent(cal);
+            BookingStore.setGoogleEvent(booking.id, {
+              eventId: calResult.eventId,
+              htmlLink: calResult.htmlLink,
+              calendarId: cal.calendarId,
+            });
+            parts.push(
+              `日历已${calResult.mode === 'updated' ? '更新' : '创建'}` +
+                (calResult.htmlLink
+                  ? ` <a href="${calResult.htmlLink}" target="_blank" rel="noopener">打开</a>`
+                  : '')
+            );
+          } catch (err) {
+            parts.push(`日历失败：${(err && err.message) || err}`);
+          }
         }
 
         const hasFail = parts.some((p) => p.includes('失败'));
@@ -460,7 +545,7 @@
                 b.status !== 'cancelled'
                   ? `<button class="btn" data-act="reschedule" data-id="${b.id}">改期</button>
                      <button class="btn danger" data-act="cancel" data-id="${b.id}">${
-                       b.status === 'hold' ? '释放预占' : '取消'
+                       b.status === 'hold' ? '释放预占' : '删除预约'
                      }</button>`
                   : ''
               }
@@ -573,6 +658,7 @@
 
   document.getElementById('btnHold').addEventListener('click', () => doCreate('hold'));
   document.getElementById('btnCreate').addEventListener('click', () => doCreate('create'));
+  document.getElementById('btnDeleteBooking').addEventListener('click', () => doDeleteBooking());
   document.getElementById('btnSideClose').addEventListener('click', closeSide);
   document.getElementById('btnSideCloseTop').addEventListener('click', closeSide);
 
@@ -632,9 +718,8 @@
     }
     if (act === 'mail') showEmail(booking, 'new');
     if (act === 'cancel') {
-      if (!confirm(booking.status === 'hold' ? '释放该预占？' : '确认取消该预约？')) return;
-      BookingStore.cancelBooking(id);
-      refresh();
+      doDeleteBooking(id);
+      return;
     }
     if (act === 'reschedule') {
       const newDate = prompt('新营业日 (YYYY-MM-DD)', booking.date);

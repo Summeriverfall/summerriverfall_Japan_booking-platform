@@ -448,6 +448,7 @@ a:hover { text-decoration: underline; }
   background: #f3ebe2;
 }
 .ctx-menu-foot .btn.ghost { grid-column: 1 / -1; }
+.ctx-menu-foot .btn.danger { grid-column: 1 / -1; }
 .ctx-menu-foot .btn { padding: .4rem .55rem; font-size: .84rem; border-radius: 6px; }
 
 /* 兼容旧类名，避免残留样式把菜单拉满屏 */

@@ -65,5 +65,33 @@
     return data;
   }
 
-  global.EmailClient = { health, sendMerchantMail, upsertCalendarEvent };
+  async function deleteCalendarEvent(payload) {
+    if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
+    if (!payload || !payload.eventId) return { ok: true, skipped: true };
+    const res = await fetch(`${baseUrl()}/calendar/delete`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        calendarId: payload.calendarId || '',
+        eventId: payload.eventId,
+      }),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || `日历删除失败 HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  global.EmailClient = {
+    health,
+    sendMerchantMail,
+    upsertCalendarEvent,
+    deleteCalendarEvent,
+  };
 })(window);

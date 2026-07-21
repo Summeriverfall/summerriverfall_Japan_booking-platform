@@ -663,7 +663,13 @@
       BookingStore.timeToOffset(booking.startTime) + booking.durationMinutes
     );
     const eventLabel =
-      eventType === 'reschedule' ? '改期通知' : eventType === 'confirm' ? '预约确认' : '新预约通知';
+      eventType === 'reschedule'
+        ? '改期通知'
+        : eventType === 'confirm'
+          ? '预约确认'
+          : eventType === 'cancel'
+            ? '取消通知'
+            : '新预约通知';
 
     const subject = `${cfg.emailSubjectPrefix}${eventLabel} ${booking.date} ${booking.startTime}`;
     const body = [
@@ -724,7 +730,9 @@
     const head =
       eventType === 'reschedule'
         ? 'Your appointment has been updated.'
-        : 'Your appointment has been confirmed.';
+        : eventType === 'cancel'
+          ? 'Your appointment has been cancelled.'
+          : 'Your appointment has been confirmed.';
     const description = [
       head,
       `SHOP: ${cfg.storeName.en || cfg.storeName.cn}`,
