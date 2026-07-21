@@ -733,6 +733,9 @@
         : eventType === 'cancel'
           ? 'Your appointment has been cancelled.'
           : 'Your appointment has been confirmed.';
+    // 写入 Google 的时区：默认用 googleWriteTimeZone，保证「表单填几点，日历就显示几点」
+    // （客服多在中国时区查看；若用 Asia/Tokyo 会在日历上整体早 1 小时）
+    const writeTz = cfg.googleWriteTimeZone || cfg.timeZone || 'Asia/Shanghai';
     const description = [
       head,
       `SHOP: ${cfg.storeName.en || cfg.storeName.cn}`,
@@ -759,7 +762,7 @@
       description,
       startDateTime: `${booking.date}T${booking.startTime}:00`,
       endDateTime: `${endDate}T${endTime}:00`,
-      timeZone: cfg.timeZone || 'Asia/Tokyo',
+      timeZone: writeTz,
     };
   }
 

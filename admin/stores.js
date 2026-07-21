@@ -41,7 +41,9 @@
       /** Google 日历：填 list-calendars 输出的 id；名称用于核对 */
       googleCalendarId: 'c1f6823fef64f0f87406ea7e337a7ff7b026e496f513d453ec97ba74edb62380@group.calendar.google.com',
       googleCalendarName: 'Ruana',
+      /** 门店营业按日本时间；写入 Google 用此时区，保证「填 15:00 日历就显示 15:00」（与客服看日历习惯一致） */
       timeZone: 'Asia/Tokyo',
+      googleWriteTimeZone: 'Asia/Shanghai',
       storageKey: 'booking-platform-runana-v1',
       /** 商家端识别码（测试用，非正式） */
       accessCode: 'RUANA88',
@@ -83,6 +85,7 @@
       googleCalendarId: '3d2196ef12eb39bff5295bf771a252e75ad6691e5253c65380e1be88cbfc5501@group.calendar.google.com',
       googleCalendarName: 'Starry Flow Spa',
       timeZone: 'Asia/Tokyo',
+      googleWriteTimeZone: 'Asia/Shanghai',
       storageKey: 'booking-platform-starryflow-v1',
       accessCode: 'STARRY88',
     },
