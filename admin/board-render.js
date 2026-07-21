@@ -452,7 +452,7 @@
       <span><i class="lg pending"></i>待客服确认（≥2人）</span>
       <span><i class="lg hold"></i>仅预占（未建单）</span>
       <span><i class="lg closure"></i>商家关闭</span>
-      <span><i class="lg selection"></i>空档拖选 / 选中块可拖移与拉伸</span>
+      <span><i class="lg selection"></i>${opts.selectionHint || '空档拖选 / 选中块可拖移与拉伸'}</span>
     `;
     wrap.appendChild(legend);
     container.appendChild(wrap);

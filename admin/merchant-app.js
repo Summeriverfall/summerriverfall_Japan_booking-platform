@@ -25,31 +25,88 @@
   const listEl = document.getElementById('closureList');
   const formErr = document.getElementById('formErr');
   const bedChecks = document.getElementById('bedChecks');
+  const startTimeEl = document.getElementById('startTime');
+  const endTimeEl = document.getElementById('endTime');
+
+  /** @type {{ bedIndexes: number[], startOffset: number, endOffset: number } | null} */
+  let rangeSelection = null;
 
   function currentDate() {
     return dateInput.value || BookingStore.todayBusinessDate();
   }
 
   function buildBedChecks() {
-    bedChecks.innerHTML = STORE_CONFIG.bedLabels
-      .map(
-        (name, i) =>
-          `<label><input type="checkbox" value="${i}"> ${name}</label>`
-      )
-      .join('');
+    bedChecks.innerHTML =
+      `<label class="bed-check-item"><input type="checkbox" id="bedAll" value="all"> <span class="bed-check-text">全部床位</span></label>` +
+      STORE_CONFIG.bedLabels
+        .map(
+          (name, i) =>
+            `<label class="bed-check-item"><input type="checkbox" class="bed-one" value="${i}"> <span class="bed-check-text">${name}</span></label>`
+        )
+        .join('');
+  }
+
+  function setBedChecks(indexes, all) {
+    const allBox = document.getElementById('bedAll');
+    const ones = [...bedChecks.querySelectorAll('input.bed-one')];
+    if (all) {
+      if (allBox) allBox.checked = true;
+      ones.forEach((el) => {
+        el.checked = true;
+        el.disabled = true;
+      });
+      return;
+    }
+    if (allBox) allBox.checked = false;
+    const set = new Set((indexes || []).map(Number));
+    ones.forEach((el) => {
+      el.disabled = false;
+      el.checked = set.has(Number(el.value));
+    });
   }
 
   function selectedBeds() {
-    const checked = [...bedChecks.querySelectorAll('input:checked')].map((x) =>
+    const allBox = document.getElementById('bedAll');
+    if (allBox && allBox.checked) return BookingStore.allBedIndexes();
+    return [...bedChecks.querySelectorAll('input.bed-one:checked')].map((x) =>
       Number(x.value)
     );
-    return checked;
+  }
+
+  function syncSelectionFromForm() {
+    const beds = selectedBeds();
+    const start = BookingStore.timeToOffset(startTimeEl.value);
+    const end = BookingStore.timeToOffset(endTimeEl.value);
+    if (!beds.length || !(end > start)) {
+      rangeSelection = null;
+      return;
+    }
+    rangeSelection = {
+      bedIndexes: beds,
+      startOffset: start,
+      endOffset: end,
+    };
   }
 
   function refresh() {
     const date = currentDate();
     dateInput.value = date;
-    BoardUI.renderBoard(boardEl, date);
+    BoardUI.renderBoard(boardEl, date, {
+      selection: rangeSelection,
+      selectionHint: '空档拖选要关闭的床位与时段',
+      onRangeSelect: (range) => {
+        rangeSelection = {
+          bedIndexes: range.bedIndexes.slice(),
+          startOffset: range.startOffset,
+          endOffset: range.endOffset,
+        };
+        startTimeEl.value = range.startTime;
+        endTimeEl.value = range.endTime;
+        setBedChecks(range.bedIndexes, false);
+        formErr.textContent = '';
+        refresh();
+      },
+    });
 
     const closures = BookingStore.listClosures(date);
     listEl.innerHTML = closures.length
@@ -61,7 +118,7 @@
             return `
           <div class="item">
             <div class="title">${c.startTime} – ${c.endTime}</div>
-            <div class="meta">${beds || '全部床'} · ${c.reason || ''} · ${c.id}</div>
+            <div class="meta">${beds || '（无床位）'} · ${c.reason || ''} · ${c.id}</div>
             <div class="actions">
               <button class="btn" data-release="${c.id}">打开（释放）</button>
             </div>
@@ -71,13 +128,30 @@
       : '<div class="hint">当日暂无手动关闭</div>';
   }
 
+  bedChecks.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLInputElement)) return;
+    if (t.id === 'bedAll') {
+      setBedChecks([], t.checked);
+    } else if (t.classList.contains('bed-one')) {
+      const allBox = document.getElementById('bedAll');
+      if (allBox) allBox.checked = false;
+    }
+    syncSelectionFromForm();
+    refresh();
+  });
+
   document.getElementById('btnClose').addEventListener('click', () => {
     formErr.textContent = '';
     const beds = selectedBeds();
+    if (!beds.length) {
+      formErr.textContent = '请先在时间轴拖选，或勾选要关闭的床位（需要关全部请勾「全部床位」）';
+      return;
+    }
     const r = BookingStore.setClosure({
       date: currentDate(),
-      startTime: document.getElementById('startTime').value,
-      endTime: document.getElementById('endTime').value,
+      startTime: startTimeEl.value,
+      endTime: endTimeEl.value,
       beds,
       reason: document.getElementById('reason').value.trim(),
     });
@@ -85,6 +159,8 @@
       formErr.textContent = r.error;
       return;
     }
+    rangeSelection = null;
+    setBedChecks([], false);
     refresh();
   });
 
@@ -97,6 +173,14 @@
 
   document.getElementById('btnRefresh').addEventListener('click', refresh);
   dateInput.addEventListener('change', refresh);
+  startTimeEl.addEventListener('change', () => {
+    syncSelectionFromForm();
+    refresh();
+  });
+  endTimeEl.addEventListener('change', () => {
+    syncSelectionFromForm();
+    refresh();
+  });
   window.addEventListener('booking-store-changed', refresh);
 
   buildBedChecks();

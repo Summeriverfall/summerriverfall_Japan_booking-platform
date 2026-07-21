@@ -25,20 +25,20 @@
 
     <div class="grid-stack">
       <section class="card card-board">
-        <h2>当前占用一览（只读）</h2>
-        <p class="hint">蓝色预约、橙色待确认、紫色预占、灰色为你关闭的时段。与客服端同一套本店数据。</p>
+        <h2>当前占用一览</h2>
+        <p class="hint">在空档上拖选床位+时段即可填入下方关床表单。灰色为已关闭；蓝/橙/紫为客服预约。</p>
         <div id="board"></div>
       </section>
 
       <section class="card card-form">
         <h2>关闭床位时段</h2>
-        <p class="hint">用于线下客流、临时维护等非预约占用。关闭后客服不可再约该段。</p>
+        <p class="hint">在上方时间轴拖选要关的床+时段，或下方勾选床位后点确认。关闭后客服不可再约该段。</p>
         <div class="toolbar">
           <div class="field"><label>开始</label><input type="time" id="startTime" value="15:00"></div>
           <div class="field"><label>结束</label><input type="time" id="endTime" value="17:00"></div>
         </div>
         <div class="field" style="margin-bottom:.6rem">
-          <label>关闭哪些床（不勾选=全部床位）</label>
+          <label>关闭哪些床（必选；要关整列请勾「全部床位」）</label>
           <div class="bed-checks" id="bedChecks"></div>
         </div>
         <div class="field" style="margin-bottom:.6rem"><label>原因</label><input id="reason" placeholder="如：散客 / 维护"></div>

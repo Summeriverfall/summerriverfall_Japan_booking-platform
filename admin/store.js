@@ -360,12 +360,17 @@
     const end = timeToOffset(input.endTime);
     if (end <= start) return { ok: false, error: '结束时间必须晚于开始时间（注意跨午夜）' };
 
+    const beds = (input.beds || []).map(Number).filter((i) => Number.isFinite(i));
+    if (!beds.length) {
+      return { ok: false, error: '请先选择要关闭的床位（可在时间轴拖选，或勾选下方床位）' };
+    }
+
     const closure = {
       id: uid('cl'),
       date: input.date,
       startTime: input.startTime,
       endTime: input.endTime,
-      beds: input.beds && input.beds.length ? input.beds : allBedIndexes(),
+      beds: [...new Set(beds)].sort((a, b) => a - b),
       reason: input.reason || '商家手动关闭',
       active: true,
       createdAt: new Date().toISOString(),
