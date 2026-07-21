@@ -8,7 +8,8 @@
     "start": "node index.js",
     "dev": "node index.js",
     "auth-google": "node auth-google.js",
-    "list-calendars": "node list-calendars.js"
+    "list-calendars": "node list-calendars.js",
+    "setup-store-calendars": "node setup-store-calendars.js"
   },
   "engines": {
     "node": ">=18"

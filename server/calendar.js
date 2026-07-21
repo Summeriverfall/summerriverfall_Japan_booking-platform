@@ -1,7 +1,40 @@
 /**
  * Google Calendar 客户端（OAuth refresh token）
  */
+const net = require('net');
 const { google } = require('googleapis');
+
+function canConnect(port, host = '127.0.0.1') {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host }, () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.on('error', () => resolve(false));
+    socket.setTimeout(400, () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function ensureProxy() {
+  if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) return;
+  const candidates = [7897, 7890, 10809, 10808];
+  for (const port of candidates) {
+    // eslint-disable-next-line no-await-in-loop
+    if (await canConnect(port)) {
+      const url = `http://127.0.0.1:${port}`;
+      process.env.HTTPS_PROXY = url;
+      process.env.HTTP_PROXY = url;
+      console.log('[calendar] 自动使用本机代理', url);
+      return;
+    }
+  }
+}
+
+// 启动时尽量挂上代理（googleapis 会读 HTTPS_PROXY）
+ensureProxy().catch(() => {});
 
 function getOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID || '';
@@ -106,9 +139,55 @@ async function deleteEvent(calendarId, eventId) {
   return { ok: true };
 }
 
+/**
+ * 按名称查找或创建日历，并设置颜色（Google 月视图里不同店=不同色点）
+ * colorId: Google 预设 1–24，见 https://developers.google.com/calendar/api/v3/reference/colors
+ */
+async function ensureNamedCalendar(summary, colorId) {
+  const cal = calendarApi();
+  const list = await cal.calendarList.list({ maxResults: 250 });
+  let existing = (list.data.items || []).find(
+    (c) => String(c.summary || '').trim() === String(summary).trim()
+  );
+
+  if (!existing) {
+    const created = await cal.calendars.insert({
+      requestBody: {
+        summary,
+        timeZone: 'Asia/Tokyo',
+      },
+    });
+    const id = created.data.id;
+    await cal.calendarList.insert({
+      requestBody: {
+        id,
+        colorId: String(colorId || '7'),
+        selected: true,
+      },
+    });
+    const again = await cal.calendarList.get({ calendarId: id });
+    existing = again.data;
+  } else if (colorId && String(existing.colorId) !== String(colorId)) {
+    await cal.calendarList.patch({
+      calendarId: existing.id,
+      requestBody: { colorId: String(colorId), selected: true },
+    });
+    const again = await cal.calendarList.get({ calendarId: existing.id });
+    existing = again.data;
+  }
+
+  return {
+    id: existing.id,
+    summary: existing.summary,
+    colorId: existing.colorId,
+    backgroundColor: existing.backgroundColor,
+  };
+}
+
 module.exports = {
   isConfigured,
   listCalendars,
   upsertEvent,
   deleteEvent,
+  ensureNamedCalendar,
 };

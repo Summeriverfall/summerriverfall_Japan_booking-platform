@@ -39,7 +39,7 @@
       merchantEmail: '1161132533@qq.com',
       emailSubjectPrefix: '[Ruana预约]',
       /** Google 日历：填 list-calendars 输出的 id；名称用于核对 */
-      googleCalendarId: '',
+      googleCalendarId: 'c1f6823fef64f0f87406ea7e337a7ff7b026e496f513d453ec97ba74edb62380@group.calendar.google.com',
       googleCalendarName: 'Ruana',
       timeZone: 'Asia/Tokyo',
       storageKey: 'booking-platform-runana-v1',
@@ -80,7 +80,7 @@
       ],
       merchantEmail: '1161132533@qq.com',
       emailSubjectPrefix: '[Starry Flow预约]',
-      googleCalendarId: '',
+      googleCalendarId: '3d2196ef12eb39bff5295bf771a252e75ad6691e5253c65380e1be88cbfc5501@group.calendar.google.com',
       googleCalendarName: 'Starry Flow Spa',
       timeZone: 'Asia/Tokyo',
       storageKey: 'booking-platform-starryflow-v1',
