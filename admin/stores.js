@@ -36,7 +36,7 @@
         { id: 'walkin', name: '到店/线下' },
         { id: 'other', name: '其他' },
       ],
-      merchantEmail: '',
+      merchantEmail: '1161132533@qq.com',
       emailSubjectPrefix: '[Ruana预约]',
       storageKey: 'booking-platform-runana-v1',
       /** 商家端识别码（测试用，非正式） */
@@ -74,7 +74,7 @@
         { id: 'walkin', name: '到店/线下' },
         { id: 'other', name: '其他' },
       ],
-      merchantEmail: '',
+      merchantEmail: '1161132533@qq.com',
       emailSubjectPrefix: '[Starry Flow预约]',
       storageKey: 'booking-platform-starryflow-v1',
       accessCode: 'STARRY88',

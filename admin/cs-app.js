@@ -221,23 +221,78 @@
 
   function showEmail(booking, eventType) {
     const draft = BoardUI.buildEmailDraft(booking, eventType);
+    const to = STORE_CONFIG.merchantEmail || '';
     emailBox.innerHTML = `
       <div><strong>主题：</strong>${escapeHtml(draft.subject)}</div>
-      <div class="hint" style="margin-top:.35rem">收件人：${STORE_CONFIG.merchantEmail || '（待配置商家邮箱）'}</div>
+      <div class="hint" style="margin-top:.35rem">发件：${escapeHtml(
+        (window.EMAIL_CONFIG && window.EMAIL_CONFIG.fromLabel) || 'summerriverfall@gmail.com'
+      )} → 收件：${escapeHtml(to || '（待配置商家邮箱）')}</div>
       <pre>${escapeHtml(draft.body)}</pre>
       <div class="hint">床位使用时段状态图（将随邮件发送）：</div>
       <img alt="床位状态图" src="${draft.chartDataUrl}">
-      <div class="actions" style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap">
+      <div class="actions" style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+        <button class="btn primary" type="button" id="btnSendMail">发送给商家</button>
         <a class="btn" download="bed-status-${booking.date}.png" href="${draft.chartDataUrl}">下载状态图</a>
         <button class="btn" type="button" id="btnCopyMail">复制邮件正文</button>
-        <span class="hint">真实 SMTP/发信通道待邮件模板到位后接入</span>
+        <span class="hint" id="mailSendStatus">需本机运行 server 代发服务</span>
       </div>
     `;
-    const btn = document.getElementById('btnCopyMail');
-    if (btn) {
-      btn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('mailSendStatus');
+    const btnCopy = document.getElementById('btnCopyMail');
+    if (btnCopy) {
+      btnCopy.addEventListener('click', async () => {
         await navigator.clipboard.writeText(draft.body);
-        btn.textContent = '已复制';
+        btnCopy.textContent = '已复制';
+      });
+    }
+    const btnSend = document.getElementById('btnSendMail');
+    if (btnSend) {
+      btnSend.addEventListener('click', async () => {
+        if (!to) {
+          statusEl.className = 'err';
+          statusEl.textContent = '未配置商家收件邮箱（stores.js → merchantEmail）';
+          return;
+        }
+        if (!window.EmailClient) {
+          statusEl.className = 'err';
+          statusEl.textContent = '邮件客户端未加载';
+          return;
+        }
+        btnSend.disabled = true;
+        statusEl.className = 'hint';
+        statusEl.textContent = '发送中…';
+        try {
+          const result = await EmailClient.sendMerchantMail({
+            to,
+            subject: draft.subject,
+            text: draft.body,
+            chartDataUrl: draft.chartDataUrl,
+            storeId: STORE_CONFIG.storeId,
+            bookingId: booking.id,
+            eventType,
+          });
+          statusEl.className = 'hint ok';
+          statusEl.textContent = `已发送（${result.messageId || 'ok'}）→ ${to}`;
+          BookingStore.appendEmailLog(booking.id, {
+            eventType,
+            mode: 'smtp_sent',
+            to,
+            messageId: result.messageId || null,
+          });
+        } catch (err) {
+          statusEl.className = 'err';
+          statusEl.textContent =
+            (err && err.message) ||
+            '发送失败。请确认已 npm start 启动 server，且 .env 已填 Gmail 应用密码。';
+          BookingStore.appendEmailLog(booking.id, {
+            eventType,
+            mode: 'smtp_failed',
+            to,
+            error: (err && err.message) || String(err),
+          });
+        } finally {
+          btnSend.disabled = false;
+        }
       });
     }
     BookingStore.appendEmailLog(booking.id, { eventType, mode: 'preview_only' });

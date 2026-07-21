@@ -53,8 +53,8 @@
     </div>
 
     <section class="card" style="margin-top:1rem" id="emailPanel">
-      <h2>商家邮件预览（正文模板待你提供）</h2>
-      <p class="hint">确认单 / 改期后会在此生成；含床位使用时段状态图。目前不真实发送，可下载图片。</p>
+      <h2>商家邮件预览 / 发送</h2>
+      <p class="hint">确认单 / 改期后会在此生成（含床位状态图）。真发信需本机启动 <code>server</code> 里的 Gmail SMTP 代发服务，详见 server/README.md。</p>
       <div class="email-box" id="emailBox">
         <div class="hint">暂无预览。创建并确认订单后显示。</div>
       </div>
@@ -94,6 +94,8 @@
   <script src="store.js"></script>
   <script src="board-render.js"></script>
   <script src="wa-parse.js"></script>
+  <script src="email-config.js"></script>
+  <script src="email-client.js"></script>
   <script src="cs-app.js"></script>
 </body>
 </html>

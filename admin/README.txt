@@ -13,5 +13,6 @@
   STARRY88  → Starry Flow Spa（12:00–次日02:00）
 
 说明：
-  - 无真实后端；数据按店隔离存在本机 localStorage
+  - 无真实预约后端；数据按店隔离存在本机 localStorage
+  - 真发信：见 ../server/README.md（Gmail SMTP 代发）
   - 原店网站文件未改；本目录为管理端功能测试
