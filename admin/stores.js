@@ -1,6 +1,6 @@
 /**
  * 多门店注册表（功能测试 · 无真实后端）
- * 测试店：Relaxation Ruana、Starry Flow Spa
+ * 测试店：Relaxation Ruana、Starry Flow Spa、Luna spa 河原町店
  */
 (function (global) {
   const STORES = [
@@ -91,6 +91,53 @@
       googleWriteTimeZone: 'Asia/Shanghai',
       storageKey: 'booking-platform-starryflow-v1',
       accessCode: 'STARRY88',
+    },
+    {
+      storeId: 'luna',
+      storeName: {
+        jp: 'Luna spa 河原町店',
+        en: 'Luna Spa Kawaramachi',
+        cn: 'Luna spa 河原町店',
+      },
+      tagline: '京都 · 河原町 / 祇园（测试版）',
+      address: '〒605-0079 京都府京都市東山区常盤町161-4 MIRAIGion ビル 4F',
+      accent: '#8b6f5c',
+      overnight: true,
+      openHour: 11,
+      openMinute: 0,
+      closeHour: 0,
+      closeMinute: 0,
+      hoursLabel: '11:00 – 24:00',
+      slotMinutes: 30,
+      bedCount: 5,
+      bedLabels: ['1号床', '2号床', '3号床', '4号床', '5号床'],
+      confirmGuestsThreshold: 2,
+      courses: [
+        { id: 'aroma', name: 'アロマオイル / 芳香精油疗法' },
+        { id: 'body', name: 'ボディマッサージ / 全身按摩' },
+        { id: 'foot', name: 'フットケア / 足部护理' },
+        { id: 'head', name: 'ヘッドスパ / 头部水疗' },
+        { id: 'combo', name: 'セットコース / 组合疗程' },
+      ],
+      channels: [
+        { id: 'whatsapp', name: 'WhatsApp' },
+        { id: 'phone', name: '电话' },
+        { id: 'line', name: 'LINE' },
+        { id: 'walkin', name: '到店/线下' },
+        { id: 'other', name: '其他' },
+      ],
+      merchantEmail: '1161132533@qq.com',
+      emailSubjectPrefix: '[Luna预约]',
+      dailyEmailTime: '00:00',
+      /** 测试版：可先共用测试日历，或稍后填专用日历 id */
+      googleCalendarId: 'c044c1c886ecf3dafe902a5a1f240e5c7201e1e10effb99bd2ba07c4810f1d54@group.calendar.google.com',
+      googleCalendarName: 'Luna（测试）',
+      timeZone: 'Asia/Tokyo',
+      googleWriteTimeZone: 'Asia/Shanghai',
+      storageKey: 'booking-platform-luna-v1',
+      accessCode: 'LUNA88',
+      /** 官网（测试托管路径） */
+      sitePath: '../shops/luna/landing.html',
     },
   ];
 

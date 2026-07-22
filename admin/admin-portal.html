@@ -40,6 +40,19 @@
           </div>
           <span class="entry-go">进入客服端 →</span>
         </a>
+        ${
+          s.sitePath
+            ? `<a class="store-card store-card-site" href="${s.sitePath}" style="--accent:${s.accent}">
+          <div class="store-card-top">
+            <span class="store-badge">官网测试</span>
+            <span class="store-hours">${s.hoursLabel}</span>
+          </div>
+          <h2>${s.storeName.cn} · 官网</h2>
+          <p class="store-tag">中英日门店页（测试托管）</p>
+          <span class="entry-go">打开官网 →</span>
+        </a>`
+            : ''
+        }
       `)
       .join('');
   </script>
