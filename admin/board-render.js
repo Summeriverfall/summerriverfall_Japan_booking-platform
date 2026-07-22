@@ -65,7 +65,7 @@
 
     const head = document.createElement('div');
     head.className = 'board-head';
-    head.innerHTML = `<div class="board-corner">床位</div><div class="board-hours"></div>`;
+    head.innerHTML = `<div class="board-corner">资源</div><div class="board-hours"></div>`;
     const hoursEl = head.querySelector('.board-hours');
     const hourCells = [];
     slotMeta.forEach((slot, idx) => {
@@ -191,6 +191,31 @@
       window.removeEventListener('pointercancel', onDragEnd);
       const drag = activeDrag;
       activeDrag = null;
+      if (opts.onDragEnd) opts.onDragEnd(drag);
+
+      const movedFar =
+        Math.abs(curOff - drag.startOff) >= snap || curBed !== drag.startBed;
+      const selBeds =
+        (opts.selection &&
+          (opts.selection.bedIndexes ||
+            (opts.selection.bedIndex != null ? [opts.selection.bedIndex] : null))) ||
+        null;
+      // 再点同一已选资源（几乎未拖动）→ 取消选择
+      if (
+        !movedFar &&
+        selBeds &&
+        selBeds.length === 1 &&
+        selBeds[0] === drag.startBed &&
+        opts.onCancelSelection
+      ) {
+        wrap.querySelectorAll('.board-selection').forEach((s) => {
+          s.hidden = true;
+        });
+        clearHourHeaderHighlight();
+        opts.onCancelSelection({ bedIndex: drag.startBed });
+        return;
+      }
+
       if (!painted.range) return;
       if (opts.onRangeSelect) {
         opts.onRangeSelect({
@@ -208,19 +233,76 @@
       }
     }
 
+    function appendNowLine(track) {
+      if (opts.showNowLine === false) return;
+      try {
+        if (dateStr !== BookingStore.todayBusinessDate()) return;
+        const now = new Date();
+        const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
+          now.getMinutes()
+        ).padStart(2, '0')}`;
+        const off = BookingStore.timeToOffset(hhmm);
+        if (off < 0 || off > span) return;
+        const line = document.createElement('div');
+        line.className = 'board-now-line';
+        line.style.left = `${(off / span) * 100}%`;
+        line.title = `当前 ${hhmm}`;
+        track.appendChild(line);
+      } catch (err) {}
+    }
+
     for (let bed = 0; bed < cfg.bedCount; bed++) {
       const row = document.createElement('div');
       row.className = 'board-row';
       const label = document.createElement('div');
       label.className = 'board-label';
-      label.textContent = cfg.bedLabels[bed] || `${bed + 1}号床`;
-      if (opts.onBedLabelClick) {
-        label.classList.add('is-clickable');
-        label.title = '点击可整日关床';
-        label.addEventListener('click', (e) => {
+      const name = cfg.bedLabels[bed] || `${bed + 1}号资源`;
+
+      if (opts.bedDayControls) {
+        label.classList.add('has-day-controls');
+        const nameEl = document.createElement('div');
+        nameEl.className = 'board-label-name';
+        nameEl.textContent = name;
+        const btns = document.createElement('div');
+        btns.className = 'board-day-btns';
+        const dayClosed = Boolean(
+          opts.isBedDayClosed && opts.isBedDayClosed(bed)
+        );
+        const btnClose = document.createElement('button');
+        btnClose.type = 'button';
+        btnClose.className = 'board-day-btn board-day-btn-close';
+        btnClose.textContent = '关';
+        btnClose.title = '整日关闭';
+        btnClose.disabled = dayClosed;
+        btnClose.addEventListener('click', (e) => {
           e.stopPropagation();
-          opts.onBedLabelClick(bed, { clientX: e.clientX, clientY: e.clientY });
+          if (opts.onDayClose) opts.onDayClose(bed, e);
         });
+        const btnOpen = document.createElement('button');
+        btnOpen.type = 'button';
+        btnOpen.className = 'board-day-btn board-day-btn-open';
+        btnOpen.textContent = '开';
+        btnOpen.title = '释放整日关闭';
+        btnOpen.disabled = !dayClosed;
+        btnOpen.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (opts.onDayOpen) opts.onDayOpen(bed, e);
+        });
+        btns.appendChild(btnClose);
+        btns.appendChild(btnOpen);
+        label.appendChild(nameEl);
+        label.appendChild(btns);
+        if (dayClosed) label.classList.add('is-day-closed');
+      } else {
+        label.textContent = name;
+        if (opts.onBedLabelClick) {
+          label.classList.add('is-clickable');
+          label.title = opts.bedLabelTitle || '点击可整日关闭该资源';
+          label.addEventListener('click', (e) => {
+            e.stopPropagation();
+            opts.onBedLabelClick(bed, { clientX: e.clientX, clientY: e.clientY });
+          });
+        }
       }
       const track = document.createElement('div');
       track.className = 'board-track';
@@ -301,25 +383,28 @@
             block.dataset.bookingId = x.ref.id;
             const bedsSorted = (x.ref.beds || [bed]).slice().sort((a, c) => a - c);
             const selected = opts.selectedBookingId === x.ref.id;
+            const canEditBooking = Boolean(opts.onBookingLayoutChange);
             if (selected) {
               block.classList.add('is-selected');
-              [['w', '左'], ['e', '右']].forEach(([h]) => {
-                const hd = document.createElement('i');
-                hd.className = `blk-handle blk-handle-${h}`;
-                hd.dataset.handle = h;
-                block.appendChild(hd);
-              });
-              if (bed === bedsSorted[0]) {
-                const hd = document.createElement('i');
-                hd.className = 'blk-handle blk-handle-n';
-                hd.dataset.handle = 'n';
-                block.appendChild(hd);
-              }
-              if (bed === bedsSorted[bedsSorted.length - 1]) {
-                const hd = document.createElement('i');
-                hd.className = 'blk-handle blk-handle-s';
-                hd.dataset.handle = 's';
-                block.appendChild(hd);
+              if (canEditBooking) {
+                [['w', '左'], ['e', '右']].forEach(([h]) => {
+                  const hd = document.createElement('i');
+                  hd.className = `blk-handle blk-handle-${h}`;
+                  hd.dataset.handle = h;
+                  block.appendChild(hd);
+                });
+                if (bed === bedsSorted[0]) {
+                  const hd = document.createElement('i');
+                  hd.className = 'blk-handle blk-handle-n';
+                  hd.dataset.handle = 'n';
+                  block.appendChild(hd);
+                }
+                if (bed === bedsSorted[bedsSorted.length - 1]) {
+                  const hd = document.createElement('i');
+                  hd.className = 'blk-handle blk-handle-s';
+                  hd.dataset.handle = 's';
+                  block.appendChild(hd);
+                }
               }
             }
 
@@ -328,7 +413,7 @@
               e.stopPropagation();
               e.preventDefault();
               const handle = e.target.closest('.blk-handle');
-              if (opts.selectedBookingId !== x.ref.id) {
+              if (opts.selectedBookingId !== x.ref.id || !canEditBooking) {
                 if (opts.onBookingSelect) {
                   opts.onBookingSelect(x.ref, { clientX: e.clientX, clientY: e.clientY });
                 }
@@ -425,11 +510,14 @@
         const startOff = offsetFromClientX(track, e.clientX);
         activeDrag = { startBed: bed, startOff, curBed: bed, curOff: startOff };
         wrap.classList.add('is-dragging');
+        if (opts.onDragStart) opts.onDragStart({ bedIndex: bed, startOffset: startOff });
         paintBedsRange(bed, bed, startOff, startOff);
         window.addEventListener('pointermove', onDragMove);
         window.addEventListener('pointerup', onDragEnd);
         window.addEventListener('pointercancel', onDragEnd);
       });
+
+      appendNowLine(track);
 
       row.appendChild(label);
       row.appendChild(track);

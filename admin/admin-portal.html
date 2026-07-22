@@ -6,6 +6,45 @@
   <title>管理员端 · 选择门店</title>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="portal.css">
+  <style>
+    .portal-tools {
+      display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+      margin: 0 0 1.1rem;
+    }
+    .portal-tools .btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: .4rem .9rem; font: inherit; font-size: .88rem; cursor: pointer;
+    }
+    .portal-tools .btn.is-on {
+      border-color: var(--accent); background: rgba(154,115,72,.12); color: #6b4f28; font-weight: 600;
+    }
+    .store-card { position: relative; }
+    .store-card.is-editing { cursor: default; }
+    .res-edit {
+      margin-top: .85rem; padding-top: .75rem; border-top: 1px dashed var(--line);
+      display: none; text-align: left;
+    }
+    .store-card.is-editing .res-edit { display: block; }
+    .store-card.is-editing .entry-go { display: none; }
+    .res-edit label { display: block; font-size: .75rem; color: var(--muted); margin: .45rem 0 .2rem; }
+    .res-edit input[type="number"],
+    .res-edit input[type="text"] {
+      width: 100%; border: 1px solid var(--line); border-radius: 8px;
+      padding: .4rem .55rem; font: inherit; background: #fff;
+    }
+    .res-labels { display: grid; gap: .35rem; }
+    .res-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
+    .res-actions .btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 8px;
+      padding: .35rem .7rem; font: inherit; font-size: .82rem; cursor: pointer;
+    }
+    .res-actions .btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .res-msg { font-size: .78rem; color: var(--muted); margin-top: .4rem; min-height: 1.1em; }
+    .res-msg.ok { color: #2f7d4a; }
+    .res-msg.err { color: #b42318; }
+  </style>
 </head>
 <body class="portal-body">
   <div class="portal-bg" aria-hidden="true"></div>
@@ -14,34 +53,153 @@
       <a class="back-link" href="index.html">← 返回平台入口</a>
       <p class="eyebrow">Admin</p>
       <h1>选择门店</h1>
-      <p class="lede">进入后即为该店客服端。各店数据相互隔离。</p>
+      <p class="lede">进入后即为该店客服端。各店数据相互隔离。可进入编辑模式修改资源名与数量（保存在本机浏览器）。</p>
     </header>
+
+    <div class="portal-tools">
+      <button type="button" class="btn" id="btnEditResources">编辑资源与项目</button>
+      <span class="lede" id="editHint" style="margin:0;font-size:.85rem">平时点击卡片进入客服端</span>
+    </div>
 
     <div class="store-grid" id="storeGrid"></div>
   </main>
 
-  <script src="stores.js?v=20260722-luna"></script>
+  <script src="stores.js?v=20260722-p0"></script>
   <script>
     StoreRegistry.setRole('admin');
     const grid = document.getElementById('storeGrid');
-    grid.innerHTML = StoreRegistry.listStores()
-      .map((s) => `
-        <a class="store-card" href="cs.html?store=${encodeURIComponent(s.storeId)}" style="--accent:${s.accent}">
-          <div class="store-card-top">
-            <span class="store-badge">客服看板</span>
-            <span class="store-hours">${s.hoursLabel}</span>
-          </div>
-          <h2>${s.storeName.cn}</h2>
-          <p class="store-tag">${s.tagline}</p>
-          <p class="store-addr">${s.address}</p>
-          <div class="store-meta">
-            <span>${s.bedCount} 床</span>
-            <span>${s.overnight ? '跨夜营业' : '当日营业'}</span>
-          </div>
-          <span class="entry-go">进入客服端 →</span>
-        </a>
-      `)
-      .join('');
+    const btnEdit = document.getElementById('btnEditResources');
+    const editHint = document.getElementById('editHint');
+    let editing = false;
+
+    function escapeHtml(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function render() {
+      const stores = StoreRegistry.listStores();
+      grid.innerHTML = stores
+        .map((s) => {
+          const labels = (s.bedLabels || []).map((name, i) =>
+            `<input type="text" data-label-i="${i}" value="${escapeHtml(name)}" ${editing ? '' : 'readonly'}>`
+          ).join('');
+          return `
+          <div class="store-card ${editing ? 'is-editing' : ''}" data-store="${escapeHtml(s.storeId)}" style="--accent:${s.accent}">
+            <a class="store-card-link" href="cs.html?store=${encodeURIComponent(s.storeId)}" ${editing ? 'onclick="return false"' : ''} style="text-decoration:none;color:inherit;display:block">
+              <div class="store-card-top">
+                <span class="store-badge">客服看板</span>
+                <span class="store-hours">${escapeHtml(s.hoursLabel)}</span>
+              </div>
+              <h2>${escapeHtml(s.storeName.cn)}</h2>
+              <p class="store-tag">${escapeHtml(s.tagline)}</p>
+              <p class="store-addr">${escapeHtml(s.address)}</p>
+              <div class="store-meta">
+                <span>${s.bedCount} 资源</span>
+                <span>${s.overnight ? '跨夜营业' : '当日营业'}</span>
+              </div>
+              <span class="entry-go">进入客服端 →</span>
+            </a>
+            <div class="res-edit">
+              <label>资源数量</label>
+              <input type="number" min="1" max="20" data-count value="${s.bedCount}">
+              <label>资源名称（房间 / VIP / 双人房 / 床位等）</label>
+              <div class="res-labels" data-labels>${labels}</div>
+              <label>预约项目（每行一项：可写「id|名称」或仅名称）</label>
+              <textarea data-courses rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .55rem;font:inherit;line-height:1.45">${escapeHtml(
+                (s.courses || [])
+                  .map((c) => (c.id ? `${c.id}|${c.name}` : c.name))
+                  .join('\n')
+              )}</textarea>
+              <div class="res-actions">
+                <button type="button" class="btn primary" data-save>保存本店资源与项目</button>
+                <button type="button" class="btn" data-reset>恢复默认</button>
+              </div>
+              <div class="res-msg" data-msg></div>
+            </div>
+          </div>`;
+        })
+        .join('');
+
+      grid.querySelectorAll('[data-count]').forEach((input) => {
+        input.addEventListener('change', () => {
+          const card = input.closest('.store-card');
+          const n = Math.max(1, Math.min(20, Number(input.value) || 1));
+          input.value = String(n);
+          const box = card.querySelector('[data-labels]');
+          const cur = [...box.querySelectorAll('input')].map((el) => el.value);
+          while (cur.length < n) cur.push(`资源${cur.length + 1}`);
+          box.innerHTML = cur
+            .slice(0, n)
+            .map(
+              (name, i) =>
+                `<input type="text" data-label-i="${i}" value="${escapeHtml(name)}">`
+            )
+            .join('');
+        });
+      });
+
+      grid.querySelectorAll('[data-save]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const card = btn.closest('.store-card');
+          const storeId = card.getAttribute('data-store');
+          const count = Number(card.querySelector('[data-count]').value) || 1;
+          const bedLabels = [...card.querySelectorAll('[data-labels] input')].map(
+            (el) => el.value.trim() || '资源'
+          );
+          const courses = String(card.querySelector('[data-courses]').value || '')
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line, i) => {
+              const parts = line.split('|');
+              if (parts.length >= 2) {
+                return {
+                  id: parts[0].trim() || `course-${i + 1}`,
+                  name: parts.slice(1).join('|').trim(),
+                };
+              }
+              return { id: `course-${i + 1}`, name: line };
+            });
+          StoreRegistry.setResourceOverride(storeId, {
+            bedCount: count,
+            bedLabels,
+            courses,
+          });
+          const msg = card.querySelector('[data-msg]');
+          msg.className = 'res-msg ok';
+          msg.textContent = '已保存资源与项目。客服端/商家端刷新后生效。';
+          render();
+        });
+      });
+
+      grid.querySelectorAll('[data-reset]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const card = btn.closest('.store-card');
+          const storeId = card.getAttribute('data-store');
+          StoreRegistry.clearResourceOverride(storeId);
+          const msg = card.querySelector('[data-msg]');
+          msg.className = 'res-msg ok';
+          msg.textContent = '已恢复默认资源列表。';
+          render();
+        });
+      });
+    }
+
+    btnEdit.addEventListener('click', () => {
+      editing = !editing;
+      btnEdit.classList.toggle('is-on', editing);
+      btnEdit.textContent = editing ? '完成编辑' : '编辑资源与项目';
+      editHint.textContent = editing
+        ? '编辑模式：可改资源名/数量与预约项目'
+        : '平时点击卡片进入客服端';
+      render();
+    });
+
+    render();
   </script>
 </body>
 </html>

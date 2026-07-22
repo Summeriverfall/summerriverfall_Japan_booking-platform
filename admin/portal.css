@@ -138,6 +138,7 @@
   transition: transform .18s ease;
 }
 .store-card:hover { transform: translateY(-3px); }
+.store-card.is-editing:hover { transform: none; }
 .store-card-top {
   display: flex;
   justify-content: space-between;

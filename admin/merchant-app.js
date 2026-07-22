@@ -9,10 +9,12 @@
     StoreRegistry.setRole('merchant');
   }
 
+  const REASON_PRESETS = ['临时关闭', '线下客户占用', '设备维护', '店员休息', '其他'];
+
   const cfg = STORE_CONFIG;
   document.title = `商家端 · ${cfg.storeName.cn}`;
   document.getElementById('pageBrand').innerHTML =
-    `商家端 · ${cfg.storeName.cn}<div class="hint" style="margin:0">${cfg.tagline} · ${cfg.hoursLabel} · ${cfg.bedCount} 床</div>`;
+    `商家端 · ${cfg.storeName.cn}<div class="hint" style="margin:0">${cfg.tagline} · ${cfg.hoursLabel} · ${cfg.bedCount} 资源</div>`;
   const mid = String(
     Math.min(cfg.openHour + 3, cfg.overnight ? 20 : Math.max(cfg.openHour + 1, cfg.closeHour - 2))
   ).padStart(2, '0');
@@ -49,6 +51,8 @@
   const startTimeEl = document.getElementById('startTime');
   const endTimeEl = document.getElementById('endTime');
   const reasonEl = document.getElementById('reason');
+  const reasonOtherEl = document.getElementById('reasonOther');
+  const reasonChips = document.getElementById('reasonChips');
   const btnClose = document.getElementById('btnClose');
   const btnRelease = document.getElementById('btnRelease');
   const btnApproveOpen = document.getElementById('btnApproveOpen');
@@ -56,27 +60,87 @@
   const openReqHint = document.getElementById('openReqHint');
   const mTimeline = document.getElementById('mTimeline');
   const mSummaryHint = document.getElementById('mSummaryHint');
+  const summaryStats = document.getElementById('summaryStats');
   const mPendingRequests = document.getElementById('mPendingRequests');
+  const occStrip = document.getElementById('occStrip');
+  const bookingListToday = document.getElementById('bookingListToday');
   const mDock = document.getElementById('mDock');
   const mSheetScrim = document.getElementById('mSheetScrim');
   const mTimelineHint = document.getElementById('mTimelineHint');
   const sideTitle = document.getElementById('sideTitle');
   const sideBodyForm = document.getElementById('sideBodyForm');
+  const sideBodyBooking = document.getElementById('sideBodyBooking');
+  const sideBookingDetail = document.getElementById('sideBookingDetail');
   const sideBodyRequests = document.getElementById('sideBodyRequests');
   const sideRequestList = document.getElementById('sideRequestList');
 
   let lastPointer = { x: 80, y: 120 };
   let rangeSelection = null;
   let selectedClosureId = null;
-  /** 手机点选：第一次点开始，第二次点结束并打开关时段 */
+  let selectedBookingId = null;
   let mobilePickStart = null;
   let dockMode = null;
-  /** day | range | edit | request */
+  /** day | range | edit | request | booking */
   let sheetMode = null;
+  let suppressPanelUntilSelect = false;
 
   function isMobileMerchant() {
     return window.matchMedia('(max-width: 768px)').matches;
   }
+
+  function courseNameOf(booking) {
+    if (!booking) return '—';
+    if (booking.courseName) return booking.courseName;
+    const course = (STORE_CONFIG.courses || []).find((c) => c.id === booking.courseId);
+    return (course && course.name) || booking.courseId || '—';
+  }
+
+  function statusLabel(s) {
+    if (s === 'confirmed') return '已确认';
+    if (s === 'pending_confirm') return '待确认';
+    if (s === 'hold') return '预占';
+    if (s === 'cancelled') return '已取消';
+    return s || '—';
+  }
+
+  function setReason(code, otherText) {
+    const preset = REASON_PRESETS.includes(code) ? code : '其他';
+    if (reasonChips) {
+      reasonChips.querySelectorAll('button').forEach((b) => {
+        b.classList.toggle('is-on', b.getAttribute('data-reason') === preset);
+      });
+    }
+    if (reasonOtherEl) {
+      const showOther = preset === '其他';
+      reasonOtherEl.hidden = !showOther;
+      if (otherText != null) reasonOtherEl.value = otherText;
+      if (!showOther) reasonOtherEl.value = '';
+    }
+    const text =
+      preset === '其他'
+        ? String((reasonOtherEl && reasonOtherEl.value) || otherText || '').trim() || '其他'
+        : preset;
+    if (reasonEl) reasonEl.value = text;
+    return { reasonCode: preset, reason: text };
+  }
+
+  function syncReasonFromUi() {
+    const on = reasonChips && reasonChips.querySelector('button.is-on');
+    const code = on ? on.getAttribute('data-reason') : '临时关闭';
+    return setReason(code, reasonOtherEl ? reasonOtherEl.value : '');
+  }
+
+  if (reasonChips) {
+    reasonChips.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-reason]');
+      if (!btn) return;
+      setReason(btn.getAttribute('data-reason'));
+    });
+  }
+  if (reasonOtherEl) {
+    reasonOtherEl.addEventListener('input', () => syncReasonFromUi());
+  }
+  setReason('临时关闭');
 
   function setDockOn(mode) {
     dockMode = mode;
@@ -109,7 +173,14 @@
   function fillFormFromClosure(c) {
     startTimeEl.value = c.startTime;
     endTimeEl.value = c.endTime;
-    reasonEl.value = c.reason || '';
+    const reason = c.reason || '临时关闭';
+    if (REASON_PRESETS.includes(reason) && reason !== '其他') {
+      setReason(reason);
+    } else if (c.reasonCode && REASON_PRESETS.includes(c.reasonCode)) {
+      setReason(c.reasonCode, c.reasonCode === '其他' ? reason : '');
+    } else {
+      setReason('其他', reason);
+    }
     renderSideBeds(c.beds || []);
   }
 
@@ -117,6 +188,25 @@
     if (selectedClosureId) {
       const blocks = [
         ...document.querySelectorAll(`.board-block[data-closure-id="${selectedClosureId}"]`),
+      ];
+      if (blocks.length) {
+        let left = Infinity;
+        let top = Infinity;
+        let right = -Infinity;
+        let bottom = -Infinity;
+        blocks.forEach((el) => {
+          const r = el.getBoundingClientRect();
+          left = Math.min(left, r.left);
+          top = Math.min(top, r.top);
+          right = Math.max(right, r.right);
+          bottom = Math.max(bottom, r.bottom);
+        });
+        return { left, top, right, bottom };
+      }
+    }
+    if (selectedBookingId) {
+      const blocks = [
+        ...document.querySelectorAll(`.board-block[data-booking-id="${selectedBookingId}"]`),
       ];
       if (blocks.length) {
         let left = Infinity;
@@ -155,6 +245,7 @@
   }
 
   function placeCtxMenu() {
+    sidePanel.classList.remove('is-drag-hidden', 'is-drag-faded');
     sidePanel.hidden = false;
     sidePanel.classList.add('is-open');
     sidePanel.setAttribute('aria-hidden', 'false');
@@ -202,8 +293,10 @@
 
   function setSheetBodies(mode) {
     const isReq = mode === 'request';
-    if (sideBodyForm) sideBodyForm.hidden = isReq;
+    const isBooking = mode === 'booking';
+    if (sideBodyForm) sideBodyForm.hidden = isReq || isBooking;
     if (sideBodyRequests) sideBodyRequests.hidden = !isReq;
+    if (sideBodyBooking) sideBodyBooking.hidden = !isBooking;
   }
 
   function setTimeInputsLocked(locked) {
@@ -216,10 +309,10 @@
   function syncActionButtons() {
     const c = selectedClosure();
     const hasRequest = c && c.openRequestStatus === 'requested';
-    if (openReqHint) openReqHint.hidden = !hasRequest || sheetMode === 'request';
-    if (btnApproveOpen) btnApproveOpen.hidden = !(hasRequest && sheetMode !== 'request');
-    if (btnRejectOpen) btnRejectOpen.hidden = !(hasRequest && sheetMode !== 'request');
-    if (sheetMode === 'request') {
+    if (openReqHint) openReqHint.hidden = !hasRequest || sheetMode === 'request' || sheetMode === 'booking';
+    if (btnApproveOpen) btnApproveOpen.hidden = !(hasRequest && sheetMode !== 'request' && sheetMode !== 'booking');
+    if (btnRejectOpen) btnRejectOpen.hidden = !(hasRequest && sheetMode !== 'request' && sheetMode !== 'booking');
+    if (sheetMode === 'request' || sheetMode === 'booking') {
       btnClose.hidden = true;
       btnRelease.hidden = true;
       return;
@@ -228,6 +321,10 @@
       btnClose.textContent = '保存调整';
       btnRelease.hidden = hasRequest;
       btnClose.hidden = hasRequest;
+      if (!hasRequest) {
+        const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
+        btnRelease.textContent = `打开（释放此${kind}）`;
+      }
     } else {
       btnClose.hidden = false;
       btnClose.textContent = sheetMode === 'day' ? '确认整日关闭' : '确认关闭';
@@ -236,6 +333,8 @@
   }
 
   function openSide(msg, point) {
+    suppressPanelUntilSelect = false;
+    sidePanel.classList.remove('is-drag-hidden', 'is-drag-faded');
     if (msg) sideHint.textContent = msg;
     if (point && point.x != null) lastPointer = { x: point.x, y: point.y };
     setSheetBodies(sheetMode);
@@ -243,29 +342,44 @@
     requestAnimationFrame(() => placeCtxMenu());
   }
 
+  function fadeSideDuringDrag() {
+    if (sidePanel.hidden) return;
+    sidePanel.classList.add('is-drag-faded');
+    sidePanel.classList.remove('is-drag-hidden');
+  }
+
   function closeSide() {
-    sidePanel.classList.remove('is-open');
+    sidePanel.classList.remove('is-open', 'is-drag-hidden', 'is-drag-faded');
     sidePanel.setAttribute('aria-hidden', 'true');
     sidePanel.hidden = true;
     if (mSheetScrim) mSheetScrim.hidden = true;
     setTimeInputsLocked(false);
     sheetMode = null;
+    selectedBookingId = null;
     setSheetBodies(null);
     if (!selectedClosureId) setDockOn(null);
   }
 
   function closeDayBed(bedIndex) {
-    const name = STORE_CONFIG.bedLabels[bedIndex] || `${bedIndex + 1}号床`;
-    if (!confirm(`将 ${name} 整天关闭（营业时段 ${STORE_CONFIG.hoursLabel}）？`)) return;
+    const name = STORE_CONFIG.bedLabels[bedIndex] || `${bedIndex + 1}号资源`;
+    if (BookingStore.hasDayClosureForBed(currentDate(), bedIndex)) {
+      formErr.className = 'err';
+      formErr.textContent = `「${name}」已整日关闭，不能重复关闭。请先点「开」释放。`;
+      return;
+    }
+    if (!confirm(`将「${name}」整天关闭（营业时段 ${STORE_CONFIG.hoursLabel}）？`)) return;
     const startTime = BookingStore.offsetToTime(0);
     const endTime = BookingStore.offsetToTime(BookingStore.businessSpanMinutes());
     if (!confirmIfBookingConflict(currentDate(), startTime, endTime, [bedIndex])) return;
+    const reason = syncReasonFromUi();
     const r = BookingStore.setClosure({
       date: currentDate(),
       startTime,
       endTime,
       beds: [bedIndex],
-      reason: '商家一键整日关床',
+      reason: reason.reason || '临时关闭',
+      reasonCode: reason.reasonCode,
+      scope: 'day',
     });
     if (!r.ok) {
       formErr.className = 'err';
@@ -276,8 +390,32 @@
     rangeSelection = null;
     mobilePickStart = null;
     formErr.className = 'hint ok';
-    formErr.textContent = `已整日关闭 ${name}（${startTime}–${endTime}）`;
+    formErr.textContent = `已整日关闭 ${name}。点左侧「开」可单独释放整日关。`;
     closeSide();
+    refresh();
+  }
+
+  function openDayBedRow(bedIndex) {
+    const name = STORE_CONFIG.bedLabels[bedIndex] || `${bedIndex + 1}号资源`;
+    const r = BookingStore.openDayBed(currentDate(), bedIndex);
+    if (!r.ok) {
+      formErr.className = 'err';
+      formErr.textContent = r.error || '打开失败';
+      return;
+    }
+    formErr.className = 'hint ok';
+    formErr.textContent = `已释放「${name}」的整日关闭（时段关闭不受影响）。`;
+    closeSide();
+    refresh();
+  }
+
+  function clearRangeSelection(msg) {
+    rangeSelection = null;
+    selectedClosureId = null;
+    mobilePickStart = null;
+    closeSide();
+    formErr.className = 'hint ok';
+    formErr.textContent = msg || '已取消选择';
     refresh();
   }
 
@@ -288,6 +426,7 @@
 
   function openRangeSheet(bedIndex, startOffset, endOffset, msg) {
     selectedClosureId = null;
+    selectedBookingId = null;
     sheetMode = 'range';
     setTimeInputsLocked(false);
     const snap = STORE_CONFIG.slotMinutes || 30;
@@ -304,7 +443,7 @@
     };
     startTimeEl.value = BookingStore.offsetToTime(start);
     endTimeEl.value = BookingStore.offsetToTime(end);
-    reasonEl.value = '商家手动关闭';
+    setReason('临时关闭');
     renderSideBeds([bedIndex]);
     if (sideTitle) sideTitle.textContent = '关时段';
     setDockOn('range');
@@ -316,6 +455,7 @@
 
   function openDayCloseSheet(preselectBeds) {
     selectedClosureId = null;
+    selectedBookingId = null;
     sheetMode = 'day';
     const start = 0;
     const end = BookingStore.businessSpanMinutes();
@@ -334,18 +474,46 @@
     startTimeEl.value = BookingStore.offsetToTime(start);
     endTimeEl.value = BookingStore.offsetToTime(end);
     setTimeInputsLocked(true);
-    reasonEl.value = '商家一键整日关床';
+    setReason('临时关闭');
     renderSideBeds(beds);
     if (sideTitle) sideTitle.textContent = '整日关床';
     setDockOn('day');
-    openSide(`营业时段 ${STORE_CONFIG.hoursLabel} 将全部关闭，请勾选床位后确认`, {
+    openSide(`营业时段 ${STORE_CONFIG.hoursLabel} 将全部关闭，请勾选资源后确认`, {
       x: window.innerWidth / 2,
       y: window.innerHeight - 80,
     });
   }
 
+  function openBookingView(booking, point) {
+    selectedClosureId = null;
+    selectedBookingId = booking.id;
+    sheetMode = 'booking';
+    rangeSelection = null;
+    const beds = (booking.beds || [])
+      .map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}`)
+      .join('、');
+    const channel = (STORE_CONFIG.channels || []).find((c) => c.id === booking.channelId);
+    const endOff =
+      BookingStore.timeToOffset(booking.startTime) + (booking.durationMinutes || 60);
+    if (sideBookingDetail) {
+      sideBookingDetail.innerHTML = `
+        <div><strong>${booking.guestName || '客人'}</strong> · ${statusLabel(booking.status)}</div>
+        <div>${booking.startTime}–${BookingStore.offsetToTime(endOff)} · ${booking.durationMinutes || 60} 分</div>
+        <div><strong>项目：</strong>${courseNameOf(booking)}</div>
+        <div>资源：${beds || '—'}</div>
+        <div>人数：${booking.guests || 1}</div>
+        <div>渠道：${(channel && channel.name) || booking.channelId || '—'}</div>
+        <div>备注：${booking.note || '—'}</div>
+        <div class="hint" style="margin-top:.35rem">商家端只读，改预约请用客服端。</div>
+      `;
+    }
+    if (sideTitle) sideTitle.textContent = '预约信息';
+    openSide('只读查看 · 含项目', point);
+  }
+
   function openRequestSheet() {
     selectedClosureId = null;
+    selectedBookingId = null;
     sheetMode = 'request';
     setTimeInputsLocked(false);
     setDockOn('req');
@@ -358,16 +526,16 @@
       return;
     }
     if (!requests.length) {
-      sideRequestList.innerHTML =
-        '<p class="hint">今日暂无待处理开床申请。</p>';
+      sideRequestList.innerHTML = '<p class="hint">今日暂无待处理开床申请。</p>';
       openSide('暂无申请可处理');
       return;
     }
     sideRequestList.innerHTML = requests
       .map((c) => {
         const beds = (c.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+        const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
         return `<div class="item" data-req-id="${c.id}">
-          <div class="title">${beds} · ${c.startTime}–${c.endTime}</div>
+          <div class="title">${kind} · ${beds} · ${c.startTime}–${c.endTime}</div>
           <div class="meta">${c.openRequestNote || c.reason || '客服申请开床'}</div>
           <div class="actions">
             <button type="button" class="btn primary" data-approve="${c.id}">同意开床</button>
@@ -382,19 +550,64 @@
     });
   }
 
-  function renderMobileSummary(date) {
-    if (!mSummaryHint) return;
+  function renderDaySummary(date) {
     const bookings = BookingStore.listBookings(date).filter((b) => b.status !== 'cancelled');
+    const confirmed = bookings.filter((b) => b.status === 'confirmed').length;
+    const pending = bookings.filter((b) => b.status === 'pending_confirm').length;
+    const holds = bookings.filter((b) => b.status === 'hold').length;
     const closures = BookingStore.listClosures(date);
+    const dayClosures = closures.filter((c) => BookingStore.isDayScopeClosure(c)).length;
+    const slotClosures = closures.length - dayClosures;
     const requests = closures.filter((c) => c.openRequestStatus === 'requested');
-    mSummaryHint.innerHTML =
-      `<span class="lg booking"></span>预约 ${bookings.length} · ` +
-      `<span class="lg closure"></span>关闭 ${closures.length} · ` +
-      `<span class="lg" style="background:var(--teal-request)"></span>开床申请 ${requests.length}`;
+
+    if (mSummaryHint) {
+      mSummaryHint.textContent = `${STORE_CONFIG.storeName.cn} · ${date} · 占用状态分类见下方`;
+    }
+    if (summaryStats) {
+      summaryStats.innerHTML = `
+        <span>已确认 <strong>${confirmed}</strong></span>
+        <span>待确认 <strong>${pending}</strong></span>
+        <span>预占 <strong>${holds}</strong></span>
+        <span>整日关 <strong>${dayClosures}</strong></span>
+        <span>时段关 <strong>${slotClosures}</strong></span>
+        <span>开床申请 <strong>${requests.length}</strong></span>
+        <span>资源 <strong>${STORE_CONFIG.bedCount}</strong></span>
+      `;
+    }
+
+    if (bookingListToday) {
+      const sorted = bookings
+        .slice()
+        .sort(
+          (a, b) =>
+            BookingStore.timeToOffset(a.startTime) - BookingStore.timeToOffset(b.startTime)
+        );
+      bookingListToday.innerHTML = sorted.length
+        ? sorted
+            .map((b) => {
+              const beds = (b.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+              const end = BookingStore.offsetToTime(
+                BookingStore.timeToOffset(b.startTime) + (b.durationMinutes || 60)
+              );
+              return `<div class="item" data-booking-row="${b.id}">
+                <div class="title">${b.startTime}–${end} · <span class="badge ${b.status}">${statusLabel(
+                  b.status
+                )}</span></div>
+                <div class="meta">${b.guestName || '客人'} · ${courseNameOf(b)}</div>
+                <div class="meta">资源：${beds || '—'} · ${b.guests || 1}人</div>
+                <div class="actions">
+                  <button type="button" class="btn" data-view-booking="${b.id}">查看</button>
+                </div>
+              </div>`;
+            })
+            .join('')
+        : '<div class="hint">今日暂无预约</div>';
+    }
 
     if (!mPendingRequests) return;
     if (!requests.length) {
-      mPendingRequests.innerHTML = '<p class="hint" style="margin-top:.4rem">暂无待处理开床申请</p>';
+      mPendingRequests.innerHTML =
+        '<p class="hint" style="margin-top:.55rem">暂无待处理开床申请</p>';
       return;
     }
     mPendingRequests.innerHTML = requests
@@ -408,6 +621,67 @@
             <button class="btn danger" data-reject="${c.id}">拒绝</button>
           </div>
         </div>`;
+      })
+      .join('');
+  }
+
+  function renderOccStrip(date) {
+    if (!occStrip) return;
+    const bookings = BookingStore.listBookings(date).filter((b) => b.status !== 'cancelled');
+    const closures = BookingStore.listClosures(date);
+    const items = [];
+    bookings.forEach((b) => {
+      items.push({
+        kind: 'booking',
+        start: BookingStore.timeToOffset(b.startTime),
+        startTime: b.startTime,
+        endTime: BookingStore.offsetToTime(
+          BookingStore.timeToOffset(b.startTime) + (b.durationMinutes || 60)
+        ),
+        ref: b,
+      });
+    });
+    closures.forEach((c) => {
+      items.push({
+        kind: 'closure',
+        start: BookingStore.timeToOffset(c.startTime),
+        startTime: c.startTime,
+        endTime: c.endTime,
+        ref: c,
+      });
+    });
+    items.sort((a, b) => a.start - b.start || a.startTime.localeCompare(b.startTime));
+
+    if (!items.length) {
+      occStrip.innerHTML = '<div class="hint">当日暂无预约或关闭</div>';
+      return;
+    }
+
+    occStrip.innerHTML = items
+      .map((it) => {
+        if (it.kind === 'booking') {
+          const b = it.ref;
+          const beds = (b.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+          const on = selectedBookingId === b.id ? ' is-on' : '';
+          return `<button type="button" class="occ-card${on}" data-occ-booking="${b.id}">
+            <div class="occ-kicker">${statusLabel(b.status)} · 预约</div>
+            <div class="occ-title">${it.startTime}–${it.endTime}</div>
+            <div class="occ-meta">${b.guestName || '客人'} · ${beds}<br><strong>${courseNameOf(
+            b
+          )}</strong></div>
+          </button>`;
+        }
+        const c = it.ref;
+        const beds = (c.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+        const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
+        const on = selectedClosureId === c.id ? ' is-on' : '';
+        return `<button type="button" class="occ-card${on}" data-occ-closure="${c.id}">
+          <div class="occ-kicker">${kind}${
+            c.openRequestStatus === 'requested' ? ' · 开床申请' : ''
+          }</div>
+          <div class="occ-title">${it.startTime}–${it.endTime}</div>
+          <div class="occ-meta">${beds}<br>${c.reason || ''}</div>
+        </button>`;
       })
       .join('');
   }
@@ -446,7 +720,7 @@
 
     let rows = `
       <div class="m-tl-row m-tl-head">
-        <div class="m-tl-corner">床</div>
+        <div class="m-tl-corner">资源</div>
         <div class="m-tl-hours">${hoursHtml}</div>
       </div>`;
 
@@ -471,9 +745,20 @@
           : BookingStore.offsetToTime(startOff);
         cells += `<button type="button" class="${cls}" data-bed="${bed}" data-slot="${i}" title="${title}"></button>`;
       }
-      const label = STORE_CONFIG.bedLabels[bed] || `${bed + 1}号床`;
+      const label = STORE_CONFIG.bedLabels[bed] || `${bed + 1}`;
+      const dayClosed = BookingStore.hasDayClosureForBed(date, bed);
       rows += `<div class="m-tl-row">
-        <button type="button" class="m-tl-label" data-bed-day="${bed}">${label}</button>
+        <div class="m-tl-label-wrap">
+          <div class="m-tl-label-name">${label}</div>
+          <div class="m-tl-day-btns">
+            <button type="button" class="board-day-btn board-day-btn-close" data-bed-close="${bed}" ${
+              dayClosed ? 'disabled' : ''
+            }>关</button>
+            <button type="button" class="board-day-btn board-day-btn-open" data-bed-open="${bed}" ${
+              dayClosed ? '' : 'disabled'
+            }>开</button>
+          </div>
+        </div>
         <div class="m-tl-track">${cells}</div>
       </div>`;
     }
@@ -482,8 +767,11 @@
     const scroller = mTimeline.querySelector('.m-timeline-scroll');
     if (scroller) scroller.scrollLeft = keepLeft;
 
-    mTimeline.querySelectorAll('[data-bed-day]').forEach((el) => {
-      el.addEventListener('click', () => closeDayBed(Number(el.getAttribute('data-bed-day'))));
+    mTimeline.querySelectorAll('[data-bed-close]').forEach((el) => {
+      el.addEventListener('click', () => closeDayBed(Number(el.getAttribute('data-bed-close'))));
+    });
+    mTimeline.querySelectorAll('[data-bed-open]').forEach((el) => {
+      el.addEventListener('click', () => openDayBedRow(Number(el.getAttribute('data-bed-open'))));
     });
 
     mTimeline.querySelectorAll('.m-tl-slot').forEach((el) => {
@@ -493,12 +781,25 @@
         const startOff = slot * snap;
         const cell = map[bed][slot];
 
+        // 再点同一已选资源空档 → 取消选择
+        if (
+          !cell &&
+          rangeSelection &&
+          (rangeSelection.bedIndexes || []).length === 1 &&
+          rangeSelection.bedIndexes[0] === bed &&
+          startOff >= rangeSelection.startOffset &&
+          startOff < rangeSelection.endOffset
+        ) {
+          clearRangeSelection('已取消选择');
+          return;
+        }
+
         if (cell && (cell.type === 'closure' || cell.type === 'closure_request')) {
           const closure = cell.ref;
           selectedClosureId = closure.id;
+          selectedBookingId = null;
           mobilePickStart = null;
-          sheetMode =
-            closure.openRequestStatus === 'requested' ? 'edit' : 'edit';
+          sheetMode = 'edit';
           setTimeInputsLocked(false);
           setSheetBodies(null);
           rangeSelection = {
@@ -511,19 +812,25 @@
           if (sideTitle) sideTitle.textContent = '关床编辑';
           setDockOn(closure.openRequestStatus === 'requested' ? 'req' : 'range');
           openSide(
-            closure.openRequestStatus === 'requested' ? '开床申请，请选择同意或拒绝' : '编辑关闭时段'
+            closure.openRequestStatus === 'requested'
+              ? '开床申请，请选择同意或拒绝'
+              : BookingStore.isDayScopeClosure(closure)
+                ? '编辑整日关闭（释放只影响这一条）'
+                : '编辑时段关闭（释放只影响这一条）'
           );
           refresh();
           return;
         }
 
         if (cell && (cell.type === 'booking' || cell.type === 'pending' || cell.type === 'hold')) {
-          formErr.className = 'hint warn';
-          formErr.textContent = '预约格只读，不能在此关闭。请点空档关时段。';
+          openBookingView(cell.ref, {
+            x: window.innerWidth / 2,
+            y: window.innerHeight - 80,
+          });
+          refresh();
           return;
         }
 
-        // 空格：点选关时段
         if (
           mobilePickStart &&
           mobilePickStart.bed === bed &&
@@ -537,13 +844,19 @@
           return;
         }
 
+        // 再点同一起始格 → 取消
+        if (mobilePickStart && mobilePickStart.bed === bed && mobilePickStart.slot === slot) {
+          clearRangeSelection('已取消选择');
+          return;
+        }
+
         mobilePickStart = { bed, slot };
         const endOff = Math.min(startOff + snap, BookingStore.businessSpanMinutes());
-        openRangeSheet(bed, startOff, endOff, '已选半小时，可再点结束格，或直接改时间后确认');
+        openRangeSheet(bed, startOff, endOff, '已选半小时；按住可继续拖选，弹层会变淡');
         if (mTimelineHint) {
           mTimelineHint.textContent = `已选 ${STORE_CONFIG.bedLabels[bed]} ${BookingStore.offsetToTime(
             startOff
-          )} 起（半小时）；再点一格可改结束时间`;
+          )} 起；再点同格取消，或再点结束格扩选`;
         }
         refresh();
       });
@@ -553,121 +866,155 @@
   function refresh() {
     const date = currentDate();
     dateInput.value = date;
+    renderDaySummary(date);
+    renderOccStrip(date);
 
     if (isMobileMerchant()) {
-      renderMobileSummary(date);
       renderMobileTimeline(date);
-      // 操作说明放在时间表卡片 #mTimelineHint，避免挤占营业日
       remainHint.textContent = '';
     } else {
       BoardUI.renderBoard(boardEl, date, {
-      selection: rangeSelection,
-      selectedClosureId,
-      selectionHint: '空档拖选关床 / 点床位号整日关 / 选中关块可拖移与拉伸',
-      onClearClosureSelect: () => {
-        if (selectedClosureId) selectedClosureId = null;
-      },
-      onBedLabelClick: (bedIndex) => closeDayBed(bedIndex),
-      onClosureSelect: (closure, point) => {
-        selectedClosureId = closure.id;
-        rangeSelection = {
-          bedIndex: (closure.beds || [0])[0],
-          bedIndexes: (closure.beds || []).slice(),
-          startOffset: BookingStore.timeToOffset(closure.startTime),
-          endOffset: BookingStore.timeToOffset(closure.endTime),
-        };
-        fillFormFromClosure(closure);
-        refresh();
-        const names = (closure.beds || [])
-          .map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}号床`)
-          .join('、');
-        openSide(
-          closure.openRequestStatus === 'requested'
-            ? `开床申请：${names} · ${closure.startTime}–${closure.endTime}`
-            : `已选中关闭块：可拖动移动；左右拉时长，上下拉床数 · ${names}`,
-          point
-        );
-      },
-      onClosureLayoutChange: (patch) => {
-        if (
-          !confirmIfBookingConflict(
-            currentDate(),
-            patch.startTime,
-            patch.endTime,
-            patch.beds
-          )
-        ) {
+        selection: rangeSelection,
+        selectedClosureId,
+        selectedBookingId,
+        selectionHint: '左侧关/开=整日；空档拖选=时段关；再点同资源取消选择',
+        bedDayControls: true,
+        isBedDayClosed: (bedIndex) => BookingStore.hasDayClosureForBed(date, bedIndex),
+        onDayClose: (bedIndex) => closeDayBed(bedIndex),
+        onDayOpen: (bedIndex) => openDayBedRow(bedIndex),
+        onClearClosureSelect: () => {
+          if (selectedClosureId) selectedClosureId = null;
+        },
+        onClearBookingSelect: () => {
+          if (selectedBookingId) selectedBookingId = null;
+        },
+        onDragStart: () => fadeSideDuringDrag(),
+        onDragEnd: () => {
+          sidePanel.classList.remove('is-drag-faded');
+        },
+        onCancelSelection: () => clearRangeSelection('已取消选择'),
+        onBookingSelect: (booking, point) => {
+          openBookingView(booking, point);
           refresh();
-          return;
-        }
-        const r = BookingStore.updateClosure(patch.id, {
-          startTime: patch.startTime,
-          endTime: patch.endTime,
-          beds: patch.beds,
-        });
-        if (!r.ok) {
-          alert(r.error);
+        },
+        onClosureSelect: (closure, point) => {
+          selectedClosureId = closure.id;
+          selectedBookingId = null;
+          sheetMode = 'edit';
+          rangeSelection = {
+            bedIndex: (closure.beds || [0])[0],
+            bedIndexes: (closure.beds || []).slice(),
+            startOffset: BookingStore.timeToOffset(closure.startTime),
+            endOffset: BookingStore.timeToOffset(closure.endTime),
+          };
+          fillFormFromClosure(closure);
           refresh();
-          return;
-        }
-        selectedClosureId = patch.id;
-        rangeSelection = {
-          bedIndex: patch.beds[0],
-          bedIndexes: patch.beds.slice(),
-          startOffset: BookingStore.timeToOffset(patch.startTime),
-          endOffset: BookingStore.timeToOffset(patch.endTime),
-        };
-        fillFormFromClosure(r.closure);
-        formErr.className = 'hint ok';
-        formErr.textContent = `已调整：${patch.startTime}–${patch.endTime} · ${patch.beds.length} 床`;
-        refresh();
-        openSide('调整已保存，可继续拖动', {
-          x: patch.clientX,
-          y: patch.clientY,
-        });
-      },
-      onRangeSelect: (range) => {
-        selectedClosureId = null;
-        const beds = range.bedIndexes || [range.bedIndex];
-        rangeSelection = {
-          bedIndex: beds[0],
-          bedIndexes: beds,
-          startOffset: range.startOffset,
-          endOffset: range.endOffset,
-        };
-        startTimeEl.value = range.startTime;
-        endTimeEl.value = range.endTime;
-        renderSideBeds(beds);
-        const names = beds.map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}号床`).join('、');
-        const conflicts = BookingStore.findBookingConflictsForRange(
-          currentDate(),
-          range.startTime,
-          range.endTime,
-          beds
-        );
-        sideErr.textContent = conflicts.length
-          ? `注意：与 ${conflicts.length} 笔预约重叠，确认关闭时会再警告一次`
-          : '';
-        formErr.className = conflicts.length ? 'hint warn' : 'hint ok';
-        formErr.textContent = conflicts.length
-          ? `已选 ${names} · ${range.startTime}–${range.endTime}（与预约重叠，可关但会警告）`
-          : `已选 ${names} · ${range.startTime}–${range.endTime}，请在菜单确认关闭。`;
-        remainHint.textContent = `选区：${names} · ${range.startTime}–${range.endTime}`;
-        openSide(
-          conflicts.length
-            ? `已选 ${names} · 与预约重叠，确认时将警告`
-            : `已选 ${names} · ${range.startTime}–${range.endTime}`,
-          {
-            x: range.clientX,
-            y: range.clientY,
+          const names = (closure.beds || [])
+            .map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}`)
+            .join('、');
+          const kind = BookingStore.isDayScopeClosure(closure) ? '整日关' : '时段关';
+          if (sideTitle) sideTitle.textContent = '关床编辑';
+          openSide(
+            closure.openRequestStatus === 'requested'
+              ? `开床申请：${names} · ${closure.startTime}–${closure.endTime}`
+              : `已选中「${kind}」：${names} · 释放只取消这一条`,
+            point
+          );
+        },
+        onClosureLayoutChange: (patch) => {
+          if (
+            !confirmIfBookingConflict(
+              currentDate(),
+              patch.startTime,
+              patch.endTime,
+              patch.beds
+            )
+          ) {
+            refresh();
+            return;
           }
-        );
-        refresh();
-      },
-    });
+          const r = BookingStore.updateClosure(patch.id, {
+            startTime: patch.startTime,
+            endTime: patch.endTime,
+            beds: patch.beds,
+          });
+          if (!r.ok) {
+            alert(r.error);
+            refresh();
+            return;
+          }
+          selectedClosureId = patch.id;
+          rangeSelection = {
+            bedIndex: patch.beds[0],
+            bedIndexes: patch.beds.slice(),
+            startOffset: BookingStore.timeToOffset(patch.startTime),
+            endOffset: BookingStore.timeToOffset(patch.endTime),
+          };
+          fillFormFromClosure(r.closure);
+          formErr.className = 'hint ok';
+          formErr.textContent = `已调整：${patch.startTime}–${patch.endTime}`;
+          refresh();
+          openSide('调整已保存，可继续拖动', {
+            x: patch.clientX,
+            y: patch.clientY,
+          });
+        },
+        onRangeSelect: (range) => {
+          // 若与当前选区完全相同 → 取消
+          if (
+            rangeSelection &&
+            rangeSelection.startOffset === range.startOffset &&
+            rangeSelection.endOffset === range.endOffset &&
+            String(rangeSelection.bedIndexes || []) === String(range.bedIndexes || [])
+          ) {
+            clearRangeSelection('已取消选择');
+            return;
+          }
+          selectedClosureId = null;
+          selectedBookingId = null;
+          sheetMode = 'range';
+          const beds = range.bedIndexes || [range.bedIndex];
+          rangeSelection = {
+            bedIndex: beds[0],
+            bedIndexes: beds,
+            startOffset: range.startOffset,
+            endOffset: range.endOffset,
+          };
+          startTimeEl.value = range.startTime;
+          endTimeEl.value = range.endTime;
+          renderSideBeds(beds);
+          setReason('临时关闭');
+          const names = beds.map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}`).join('、');
+          const conflicts = BookingStore.findBookingConflictsForRange(
+            currentDate(),
+            range.startTime,
+            range.endTime,
+            beds
+          );
+          sideErr.textContent = conflicts.length
+            ? `注意：与 ${conflicts.length} 笔预约重叠，确认关闭时会再警告一次`
+            : '';
+          formErr.className = conflicts.length ? 'hint warn' : 'hint ok';
+          formErr.textContent = conflicts.length
+            ? `已选 ${names} · ${range.startTime}–${range.endTime}（与预约重叠）`
+            : `已选 ${names} · ${range.startTime}–${range.endTime}，请确认关闭。再点同资源可取消。`;
+          remainHint.textContent = `选区：${names} · ${range.startTime}–${range.endTime}`;
+          if (sideTitle) sideTitle.textContent = '关时段';
+          openSide(
+            conflicts.length
+              ? `已选 ${names} · 与预约重叠；继续拖选时弹层会变淡`
+              : `已选 ${names} · ${range.startTime}–${range.endTime}（拖动时弹层变淡）`,
+            {
+              x: range.clientX,
+              y: range.clientY,
+            }
+          );
+          refresh();
+        },
+      });
 
-      if (!rangeSelection) {
-        remainHint.textContent = '在空档拖选，或点击灰色关闭块进行编辑';
+      if (!rangeSelection && !selectedClosureId && !selectedBookingId) {
+        remainHint.textContent = '左侧「关/开」整日操作；空档拖选关时段；点预约看项目';
       }
     }
 
@@ -676,21 +1023,22 @@
       ? closures
           .map((c) => {
             const beds = (c.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+            const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
             const req =
               c.openRequestStatus === 'requested'
                 ? '<span class="badge hold">开床申请中</span>'
                 : '';
             return `
           <div class="item" data-id="${c.id}">
-            <div class="title">${c.startTime} – ${c.endTime} ${req}</div>
-            <div class="meta">${beds || '（无床位）'} · ${c.reason || ''} · ${c.id}</div>
+            <div class="title"><span class="badge">${kind}</span> ${c.startTime} – ${c.endTime} ${req}</div>
+            <div class="meta">${beds || '（无资源）'} · ${c.reason || ''} · ${c.id}</div>
             <div class="actions">
               <button class="btn" data-select="${c.id}">选中编辑</button>
               ${
                 c.openRequestStatus === 'requested'
                   ? `<button class="btn primary" data-approve="${c.id}">同意开床</button>
                      <button class="btn" data-reject="${c.id}">拒绝</button>`
-                  : `<button class="btn" data-release="${c.id}">打开（释放）</button>`
+                  : `<button class="btn" data-release="${c.id}">释放此${kind}</button>`
               }
             </div>
           </div>`;
@@ -715,7 +1063,7 @@
     formErr.textContent = '';
     const beds = selectedBedsFromSide();
     if (!beds.length) {
-      sideErr.textContent = '请勾选要关闭的床位';
+      sideErr.textContent = '请勾选要关闭的资源';
       openSide();
       return;
     }
@@ -731,12 +1079,22 @@
       return;
     }
 
+    const reason = syncReasonFromUi();
+    const scope =
+      sheetMode === 'day' ||
+      (BookingStore.timeToOffset(startTimeEl.value) === 0 &&
+        BookingStore.timeToOffset(endTimeEl.value) === BookingStore.businessSpanMinutes())
+        ? 'day'
+        : 'slot';
+
     if (selectedClosureId) {
       const r = BookingStore.updateClosure(selectedClosureId, {
         startTime: startTimeEl.value,
         endTime: endTimeEl.value,
         beds,
-        reason: reasonEl.value.trim(),
+        reason: reason.reason,
+        reasonCode: reason.reasonCode,
+        scope,
       });
       if (!r.ok) {
         sideErr.textContent = r.error;
@@ -755,7 +1113,9 @@
       startTime: startTimeEl.value,
       endTime: endTimeEl.value,
       beds,
-      reason: reasonEl.value.trim(),
+      reason: reason.reason,
+      reasonCode: reason.reasonCode,
+      scope,
     });
     if (!r.ok) {
       sideErr.textContent = r.error;
@@ -768,7 +1128,10 @@
     rangeSelection = null;
     mobilePickStart = null;
     formErr.className = 'hint ok';
-    formErr.textContent = '已关闭所选床位时段。';
+    formErr.textContent =
+      scope === 'day'
+        ? '已整日关闭。释放时请点对应「整日关」记录。'
+        : '已关闭所选时段。释放时请点对应「时段关」记录。';
     closeSide();
     setDockOn(null);
     refresh();
@@ -777,11 +1140,13 @@
   function doRelease(id) {
     const target = id || selectedClosureId;
     if (!target) return;
+    const before = BookingStore.listClosures(currentDate()).find((c) => c.id === target);
+    const kind = before && BookingStore.isDayScopeClosure(before) ? '整日关' : '时段关';
     BookingStore.releaseClosure(target);
     if (selectedClosureId === target) selectedClosureId = null;
     rangeSelection = null;
     formErr.className = 'hint ok';
-    formErr.textContent = '已打开（释放）该关闭时段。';
+    formErr.textContent = `已释放此「${kind}」记录；其他关闭不受影响。`;
     closeSide();
     refresh();
   }
@@ -824,17 +1189,18 @@
   }
 
   document.addEventListener('pointerdown', (e) => {
-    if (sidePanel.hidden) return;
+    if (sidePanel.hidden || sidePanel.classList.contains('is-drag-hidden')) return;
     if (sidePanel.contains(e.target)) return;
     if (e.target.closest && e.target.closest('.board-track')) return;
     if (e.target.closest && e.target.closest('.board-label')) return;
     if (e.target.closest && e.target.closest('.m-timeline')) return;
     if (e.target.closest && e.target.closest('.m-dock')) return;
+    if (e.target.closest && e.target.closest('.occ-strip')) return;
     if (mSheetScrim && e.target === mSheetScrim) {
       closeSide();
       return;
     }
-    if (isMobileMerchant()) return; // 手机点空白不自动关弹层，点遮罩或 ×
+    if (isMobileMerchant()) return;
     closeSide();
   });
   document.addEventListener('keydown', (e) => {
@@ -896,6 +1262,57 @@
     sideRequestList.addEventListener('click', onApproveRejectClick);
   }
 
+  if (bookingListToday) {
+    bookingListToday.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-view-booking]');
+      if (!btn) return;
+      const id = btn.getAttribute('data-view-booking');
+      const booking = BookingStore.listBookings(currentDate()).find((x) => x.id === id);
+      if (booking) {
+        openBookingView(booking, { x: e.clientX, y: e.clientY });
+        refresh();
+      }
+    });
+  }
+
+  if (occStrip) {
+    occStrip.addEventListener('click', (e) => {
+      const bBtn = e.target.closest('[data-occ-booking]');
+      if (bBtn) {
+        const id = bBtn.getAttribute('data-occ-booking');
+        const booking = BookingStore.listBookings(currentDate()).find((x) => x.id === id);
+        if (booking) {
+          openBookingView(booking, { x: e.clientX, y: e.clientY });
+          refresh();
+        }
+        return;
+      }
+      const cBtn = e.target.closest('[data-occ-closure]');
+      if (!cBtn) return;
+      const id = cBtn.getAttribute('data-occ-closure');
+      const c = BookingStore.listClosures(currentDate()).find((x) => x.id === id);
+      if (!c) return;
+      selectedClosureId = c.id;
+      selectedBookingId = null;
+      sheetMode = 'edit';
+      rangeSelection = {
+        bedIndex: (c.beds || [0])[0],
+        bedIndexes: (c.beds || []).slice(),
+        startOffset: BookingStore.timeToOffset(c.startTime),
+        endOffset: BookingStore.timeToOffset(c.endTime),
+      };
+      fillFormFromClosure(c);
+      if (sideTitle) sideTitle.textContent = '关床编辑';
+      openSide(
+        BookingStore.isDayScopeClosure(c)
+          ? '整日关记录（释放只取消这一条）'
+          : '时段关记录（释放只取消这一条）',
+        { x: e.clientX, y: e.clientY }
+      );
+      refresh();
+    });
+  }
+
   window.addEventListener('resize', () => {
     refresh();
   });
@@ -935,6 +1352,8 @@
     const c = BookingStore.listClosures(currentDate()).find((x) => x.id === id);
     if (!c) return;
     selectedClosureId = c.id;
+    selectedBookingId = null;
+    sheetMode = 'edit';
     rangeSelection = {
       bedIndex: (c.beds || [0])[0],
       bedIndexes: (c.beds || []).slice(),
@@ -952,11 +1371,19 @@
   document.getElementById('btnRefresh').addEventListener('click', refresh);
   dateInput.addEventListener('change', () => {
     selectedClosureId = null;
+    selectedBookingId = null;
     rangeSelection = null;
     closeSide();
     refresh();
   });
   window.addEventListener('booking-store-changed', refresh);
+
+  // 当前时间线约每分钟刷新一次
+  setInterval(() => {
+    if (!isMobileMerchant() && dateInput.value === BookingStore.todayBusinessDate()) {
+      refresh();
+    }
+  }, 60000);
 
   renderSideBeds([]);
   dateInput.value = BookingStore.todayBusinessDate();

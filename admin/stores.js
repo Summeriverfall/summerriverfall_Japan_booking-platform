@@ -22,12 +22,18 @@
       hoursLabel: '11:00 – 21:30',
       slotMinutes: 30,
       bedCount: 5,
-      bedLabels: ['1号床', '2号床', '3号床', '4号床', '5号床'],
+      bedLabels: ['オイルルーム①', 'オイルルーム②', 'もみほぐし室', 'VIP包間', 'ペアルーム'],
       confirmGuestsThreshold: 2,
       courses: [
-        { id: 'oil', name: 'オイルトリートメント / 精油护理' },
-        { id: 'momi', name: 'もみほぐし / 推拿放松' },
-        { id: 'combo', name: 'コース组合' },
+        { id: 'oil-60', name: 'オイルトリートメント 60分 / 精油护理 60分钟' },
+        { id: 'oil-90', name: 'オイルトリートメント 90分 / 精油护理 90分钟' },
+        { id: 'oil-120', name: 'オイルトリートメント 120分 / 精油护理 120分钟' },
+        { id: 'momi-60', name: 'もみほぐし 60分 / 推拿放松 60分钟' },
+        { id: 'momi-90', name: 'もみほぐし 90分 / 推拿放松 90分钟' },
+        { id: 'head-30', name: 'ヘッドスパ 30分 / 头部水疗 30分钟' },
+        { id: 'head-45', name: 'ヘッドスパ 45分 / 头部水疗 45分钟' },
+        { id: 'foot-30', name: 'フットケア 30分 / 足部护理 30分钟' },
+        { id: 'combo', name: 'コース组合 / 套餐组合' },
       ],
       channels: [
         { id: 'whatsapp', name: 'WhatsApp' },
@@ -68,12 +74,25 @@
       hoursLabel: '12:00 – 次日 02:00',
       slotMinutes: 30,
       bedCount: 5,
-      bedLabels: ['1号床', '2号床', '3号床', '4号床', '5号床'],
+      bedLabels: ['スパルームA', 'スパルームB', 'リラクスルーム', 'VIPスイート', 'ミッドナイトルーム'],
       confirmGuestsThreshold: 2,
       courses: [
-        { id: 'body', name: 'ボディマッサージ / 身体按摩' },
-        { id: 'spa', name: 'スパトリートメント / 水疗护理' },
-        { id: 'relax', name: 'リラクゼーション / 放松护理' },
+        { id: 'body-60', name: 'ボディマッサージ 60分 / 身体按摩 60分钟' },
+        { id: 'body-90', name: 'ボディマッサージ 90分 / 身体按摩 90分钟' },
+        { id: 'body-120', name: 'ボディマッサージ 120分 / 身体按摩 120分钟' },
+        { id: 'oil-60', name: 'アロマオイル 60分 / 芳香精油 60分钟' },
+        { id: 'oil-90', name: 'アロマオイル 90分 / 芳香精油 90分钟' },
+        { id: 'oil-120', name: 'アロマオイル 120分 / 芳香精油 120分钟' },
+        { id: 'spa-90', name: 'スパトリートメント 90分 / 水疗护理 90分钟' },
+        { id: 'spa-120', name: 'スパトリートメント 120分 / 水疗护理 120分钟' },
+        { id: 'relax-60', name: 'リラクゼーション 60分 / 放松护理 60分钟' },
+        { id: 'head-30', name: 'ヘッドスパ 30分 / 头部水疗 30分钟' },
+        { id: 'head-45', name: 'ヘッドスパ 45分 / 头部水疗 45分钟' },
+        { id: 'foot-30', name: 'フットセラピー 30分 / 足部护理 30分钟' },
+        { id: 'foot-45', name: 'フットセラピー 45分 / 足部护理 45分钟' },
+        { id: 'head-shoulder', name: 'ヘッド＆ショルダー 45分 / 头肩护理 45分钟' },
+        { id: 'pair-90', name: 'ペアコース 90分 / 双人套餐 90分钟' },
+        { id: 'midnight-120', name: 'ミッドナイトスパ 120分 / 深夜水疗 120分钟' },
       ],
       channels: [
         { id: 'whatsapp', name: 'WhatsApp' },
@@ -110,14 +129,25 @@
       hoursLabel: '11:00 – 24:00',
       slotMinutes: 30,
       bedCount: 5,
-      bedLabels: ['1号床', '2号床', '3号床', '4号床', '5号床'],
+      bedLabels: ['アロマ包間', 'ボディルーム', 'フットケア室', 'ヘッドスパ室', 'VIP包房'],
       confirmGuestsThreshold: 2,
       courses: [
-        { id: 'aroma', name: 'アロマオイル / 芳香精油疗法' },
-        { id: 'body', name: 'ボディマッサージ / 全身按摩' },
-        { id: 'foot', name: 'フットケア / 足部护理' },
-        { id: 'head', name: 'ヘッドスパ / 头部水疗' },
-        { id: 'combo', name: 'セットコース / 组合疗程' },
+        { id: 'aroma-lux', name: '芳香奢华 - ¥24,800' },
+        { id: 'aroma-prem', name: '芳香尊享 - ¥20,800' },
+        { id: 'body-head', name: '身体·头部 - ¥13,800' },
+        { id: 'body-foot', name: '身体·足部 - ¥13,800' },
+        { id: 'aroma-head', name: '芳香·头部 - ¥16,800' },
+        { id: 'aroma-foot', name: '芳香·足部 - ¥16,800' },
+        { id: 'momi-60', name: '按摩 60分钟 - ¥8,800' },
+        { id: 'momi-90', name: '按摩 90分钟 - ¥12,800' },
+        { id: 'momi-120', name: '按摩 120分钟 - ¥16,800' },
+        { id: 'oil-60', name: '芳香精油疗法 60分钟 - ¥11,800' },
+        { id: 'oil-90', name: '芳香精油疗法 90分钟 - ¥15,800' },
+        { id: 'oil-120', name: '芳香精油疗法 120分钟 - ¥19,800' },
+        { id: 'head-30', name: '头部水疗 30分钟 - ¥5,800' },
+        { id: 'head-45', name: '头部水疗 45分钟 - ¥7,800' },
+        { id: 'foot-30', name: '足部护理 30分钟 - ¥5,800' },
+        { id: 'foot-45', name: '足部护理 45分钟 - ¥7,800' },
       ],
       channels: [
         { id: 'whatsapp', name: 'WhatsApp' },
@@ -143,20 +173,92 @@
 
   const SESSION_STORE = 'booking_platform_store';
   const SESSION_ROLE = 'booking_platform_role';
+  const RESOURCE_OVERRIDE_KEY = 'booking_platform_resource_overrides_v1';
+
+  function readResourceOverrides() {
+    try {
+      return JSON.parse(localStorage.getItem(RESOURCE_OVERRIDE_KEY) || '{}') || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function getResourceOverride(storeId) {
+    const all = readResourceOverrides();
+    return all[storeId] || null;
+  }
+
+  function setResourceOverride(storeId, patch) {
+    const all = readResourceOverrides();
+    const prev = all[storeId] || {};
+    const next = Object.assign({}, prev, patch || {});
+    const base = STORES.find((s) => s.storeId === storeId);
+    const count = Math.max(
+      1,
+      Math.min(20, Number(next.bedCount != null ? next.bedCount : (base && base.bedCount) || 1))
+    );
+    let labels = Array.isArray(next.bedLabels)
+      ? next.bedLabels.map((x) => String(x || '').trim())
+      : (base && base.bedLabels ? base.bedLabels.slice() : []);
+    while (labels.length < count) labels.push(`资源${labels.length + 1}`);
+    labels = labels.slice(0, count).map((name, i) => name || `资源${i + 1}`);
+
+    let courses = Array.isArray(next.courses) ? next.courses : prev.courses;
+    if (Array.isArray(courses)) {
+      courses = courses
+        .map((c, i) => {
+          const name = String((c && c.name) || '').trim();
+          if (!name) return null;
+          const id =
+            String((c && c.id) || '')
+              .trim()
+              .replace(/\s+/g, '-') || `course-${i + 1}`;
+          return { id, name };
+        })
+        .filter(Boolean);
+    }
+
+    const saved = { bedCount: count, bedLabels: labels };
+    if (courses) saved.courses = courses;
+    all[storeId] = saved;
+    localStorage.setItem(RESOURCE_OVERRIDE_KEY, JSON.stringify(all));
+    return all[storeId];
+  }
+
+  function clearResourceOverride(storeId) {
+    const all = readResourceOverrides();
+    delete all[storeId];
+    localStorage.setItem(RESOURCE_OVERRIDE_KEY, JSON.stringify(all));
+  }
+
+  function withResourceOverride(store) {
+    if (!store) return null;
+    const ov = getResourceOverride(store.storeId);
+    if (!ov) return store;
+    const merged = Object.assign({}, store, {
+      bedCount: ov.bedCount != null ? ov.bedCount : store.bedCount,
+      bedLabels: ov.bedLabels ? ov.bedLabels.slice() : store.bedLabels.slice(),
+    });
+    if (Array.isArray(ov.courses) && ov.courses.length) {
+      merged.courses = ov.courses.map((c) => Object.assign({}, c));
+    }
+    return merged;
+  }
 
   function listStores() {
-    return STORES.slice();
+    return STORES.map((s) => withResourceOverride(s));
   }
 
   function getStore(id) {
-    return STORES.find((s) => s.storeId === id) || null;
+    return withResourceOverride(STORES.find((s) => s.storeId === id) || null);
   }
 
   function findByAccessCode(code) {
     const c = String(code || '')
       .trim()
       .toUpperCase();
-    return STORES.find((s) => s.accessCode.toUpperCase() === c) || null;
+    const raw = STORES.find((s) => s.accessCode.toUpperCase() === c) || null;
+    return withResourceOverride(raw);
   }
 
   function applyStore(id) {
@@ -220,5 +322,8 @@
     setRole,
     getRole,
     clearSession,
+    getResourceOverride,
+    setResourceOverride,
+    clearResourceOverride,
   };
 })(window);

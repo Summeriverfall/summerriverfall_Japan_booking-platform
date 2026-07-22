@@ -19,25 +19,30 @@
       <span class="hint" id="remainHint"></span>
     </div>
 
-    <!-- 手机：今日摘要 -->
-    <section class="card m-only" id="mSummaryCard">
+    <section class="card" id="mSummaryCard">
       <h2>今日摘要</h2>
       <p class="hint" id="mSummaryHint">—</p>
+      <div class="summary-stats" id="summaryStats"></div>
       <div id="mPendingRequests"></div>
     </section>
 
     <div class="grid-stack">
-      <!-- 桌面：原时间轴 -->
       <section class="card card-board desk-only">
-        <h2>床位时间轴（开关床）</h2>
-        <p class="hint">点击左侧床位号可整日关床；空档拖选可关时段。点灰色「关」可编辑；青绿色「申」为客服开床申请，点选后可同意或拒绝。预约色块只读。</p>
+        <h2>资源时间轴（开关床）</h2>
+        <p class="hint">左侧「关/开」= 整日关闭 / 释放整日关。空档按住拖选关时段（拖动时弹层变淡）。再点已选同一资源可取消选择。棕线=当前时刻。</p>
+        <div class="board-legend" style="margin-bottom:.65rem">
+          <span><i class="lg booking"></i>已确认预约</span>
+          <span><i class="lg pending"></i>待确认</span>
+          <span><i class="lg hold"></i>预占</span>
+          <span><i class="lg closure"></i>商家关闭</span>
+          <span><i class="lg" style="background:var(--teal-request)"></i>开床申请</span>
+        </div>
         <div id="board"></div>
       </section>
 
-      <!-- 手机：联动时间表 -->
       <section class="card card-board m-only">
         <h2>占用时间表</h2>
-        <p class="hint" id="mTimelineHint">五床一起横滑；点空格关闭半小时，再点可改结束。点床位号可整日关。</p>
+        <p class="hint" id="mTimelineHint">点资源旁「关/开」整日操作；点空格关时段；点预约可查看项目。</p>
         <div class="m-timeline" id="mTimeline"></div>
         <div class="board-legend" style="margin-top:.65rem">
           <span><i class="lg booking"></i>已确认</span>
@@ -48,24 +53,34 @@
         </div>
       </section>
 
+      <section class="card">
+        <h2>今日预约列表</h2>
+        <p class="hint">按到店时间排序；含项目与资源。</p>
+        <div class="list" id="bookingListToday"></div>
+      </section>
+
+      <section class="card">
+        <h2>当日占用（按时间）</h2>
+        <p class="hint">预约与关闭混排，大致对应时间轴；点击查看。</p>
+        <div class="occ-strip" id="occStrip"></div>
+      </section>
+
       <section class="card card-form">
         <h2>当日关闭记录</h2>
-        <p class="hint desk-only">与客服端同一套本店数据。也可在列表里直接释放或处理开床申请。</p>
-        <p class="hint m-only">列表可释放或处理开床申请；点时间表空格可新建关闭。</p>
+        <p class="hint desk-only">整日关 / 时段关分条列出，释放互不影响。也可在列表里处理开床申请。</p>
+        <p class="hint m-only">列表可分别释放或处理开床申请。</p>
         <div class="list" id="closureList"></div>
         <div class="err" id="formErr"></div>
       </section>
     </div>
   </main>
 
-  <!-- 手机底栏 -->
   <nav class="m-dock m-only" id="mDock" aria-label="快捷操作">
     <button type="button" data-dock="day" id="dockDay"><span class="m-dock-ico">⛔</span>整日关</button>
     <button type="button" data-dock="range" id="dockRange"><span class="m-dock-ico">⏱</span>关时段</button>
     <button type="button" data-dock="req" id="dockReq"><span class="m-dock-ico">✉</span>申请</button>
   </nav>
 
-  <!-- 编辑面板：桌面贴选区；手机为底部弹层 -->
   <div class="ctx-menu" id="sidePanel" aria-hidden="true" hidden>
     <div class="ctx-menu-head">
       <div>
@@ -77,10 +92,24 @@
     <div class="ctx-menu-body" id="sideBodyForm">
       <div class="side-field"><label>开始</label><input id="startTime" type="time" step="1800"></div>
       <div class="side-field"><label>结束</label><input id="endTime" type="time" step="1800"></div>
-      <div class="side-field"><label>关闭哪些床</label><div class="bed-checks" id="sideBeds"></div></div>
-      <div class="side-field"><label>原因</label><input id="reason" placeholder="如：散客 / 维护"></div>
+      <div class="side-field"><label>关闭哪些资源</label><div class="bed-checks" id="sideBeds"></div></div>
+      <div class="side-field">
+        <label>原因</label>
+        <div class="reason-chips" id="reasonChips">
+          <button type="button" data-reason="临时关闭">临时关闭</button>
+          <button type="button" data-reason="线下客户占用">线下客户占用</button>
+          <button type="button" data-reason="设备维护">设备维护</button>
+          <button type="button" data-reason="店员休息">店员休息</button>
+          <button type="button" data-reason="其他">其他</button>
+        </div>
+        <input id="reasonOther" type="text" placeholder="请填写其他原因" hidden style="margin-top:.4rem;width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .6rem;font:inherit">
+        <input id="reason" type="hidden" value="临时关闭">
+      </div>
       <p class="hint warn" id="openReqHint" hidden style="margin:0">客服已申请开床，请选择同意或拒绝。</p>
       <div class="err" id="sideErr"></div>
+    </div>
+    <div class="ctx-menu-body" id="sideBodyBooking" hidden>
+      <div id="sideBookingDetail" class="hint" style="margin:0;line-height:1.55"></div>
     </div>
     <div class="ctx-menu-body" id="sideBodyRequests" hidden>
       <div id="sideRequestList"></div>
@@ -95,7 +124,7 @@
   </div>
   <div class="m-sheet-scrim m-only" id="mSheetScrim" hidden></div>
 
-  <script src="stores.js?v=20260722-luna"></script>
+  <script src="stores.js?v=20260722-p0"></script>
   <script src="store.js"></script>
   <script src="board-render.js"></script>
   <script src="merchant-app.js"></script>
