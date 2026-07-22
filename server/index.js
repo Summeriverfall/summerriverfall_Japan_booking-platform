@@ -7,6 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const calendar = require('./calendar');
+const digest = require('./digest');
 
 const PORT = Number(process.env.PORT || 8787);
 const GMAIL_USER = process.env.GMAIL_USER || '';
@@ -68,7 +69,26 @@ app.get('/health', (_req, res) => {
     gmailConfigured: Boolean(GMAIL_USER && GMAIL_APP_PASSWORD),
     calendarConfigured: calendar.isConfigured(),
     from: GMAIL_USER || null,
+    digest: digest.listStatus(),
+    nowShanghai: digest.shanghaiNowParts(),
   });
+});
+
+/**
+ * POST /digest/register
+ * 客服端上报「某店某营业日」的每日汇总正文；网关到设定时刻自动发送
+ */
+app.post('/digest/register', requireApiKey, (req, res) => {
+  try {
+    const result = digest.register(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+app.get('/digest/status', requireApiKey, (_req, res) => {
+  res.json({ ok: true, stores: digest.listStatus(), now: digest.shanghaiNowParts() });
 });
 
 app.get('/calendar/list', requireApiKey, async (_req, res) => {
@@ -149,7 +169,7 @@ app.post('/calendar/delete', requireApiKey, async (req, res) => {
   }
 });
 
-/** 清理某日本平台写入的全部事件（去重/清测试用） */
+/** 清理某日该店日历全部事件 */
 app.post('/calendar/cleanup-day', requireApiKey, async (req, res) => {
   try {
     const { calendarId, date } = req.body || {};
@@ -160,6 +180,25 @@ app.post('/calendar/cleanup-day', requireApiKey, async (req, res) => {
     const result = await calendar.cleanupPlatformDay(calendarId, date);
     res.json(result);
   } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+/**
+ * 整日重写店日历：先清空当日，再写入 events[]
+ * body: { calendarId, date, events: [upsert payload...] }
+ */
+app.post('/calendar/rewrite-day', requireApiKey, async (req, res) => {
+  try {
+    const { calendarId, date, events } = req.body || {};
+    if (!calendarId || !date) {
+      res.status(400).json({ ok: false, error: '缺少 calendarId / date' });
+      return;
+    }
+    const result = await calendar.rewriteDay(calendarId, date, events || []);
+    res.json(result);
+  } catch (err) {
+    console.error('[calendar] rewrite-day failed', err);
     res.status(500).json({ ok: false, error: err.message || String(err) });
   }
 });
@@ -206,7 +245,7 @@ app.post('/send', requireApiKey, async (req, res) => {
     }
 
     const info = await transporter.sendMail({
-      from: `"门店预约平台" <${GMAIL_USER}>`,
+      from: `"预约管理平台" <${GMAIL_USER}>`,
       to,
       subject,
       text: text || undefined,
@@ -237,9 +276,53 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+async function sendMailPayload({ to, subject, text, chartDataUrl }) {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    throw new Error('服务端未配置 Gmail SMTP');
+  }
+  const attachments = [];
+  let finalHtml;
+  if (chartDataUrl && String(chartDataUrl).startsWith('data:image')) {
+    const m = String(chartDataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (m) {
+      attachments.push({
+        filename: 'bed-status.png',
+        content: Buffer.from(m[2], 'base64'),
+        contentType: m[1],
+        cid: 'bedstatus@booking',
+      });
+      finalHtml =
+        `<pre style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(
+          text || ''
+        )}</pre>` +
+        `<p><img src="cid:bedstatus@booking" alt="床位状态图" style="max-width:100%;border:1px solid #ddd"/></p>`;
+    }
+  }
+  const info = await transporter.sendMail({
+    from: `"预约管理平台" <${GMAIL_USER}>`,
+    to,
+    subject,
+    text: text || undefined,
+    html: finalHtml || undefined,
+    attachments,
+  });
+  return { messageId: info.messageId };
+}
+
 app.listen(PORT, () => {
   console.log(`[gateway] listening on http://127.0.0.1:${PORT}`);
   console.log(
     `[gateway] gmail=${Boolean(GMAIL_USER && GMAIL_APP_PASSWORD)} calendar=${calendar.isConfigured()}`
   );
+  // 每 30 秒检查是否到达各店设定的每日邮件时刻
+  setInterval(() => {
+    digest
+      .tick(sendMailPayload)
+      .then((results) => {
+        if (results && results.length) {
+          console.log('[digest] tick', JSON.stringify(results));
+        }
+      })
+      .catch((err) => console.error('[digest] tick failed', err));
+  }, 30000);
 });

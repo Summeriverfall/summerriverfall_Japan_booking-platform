@@ -23,6 +23,12 @@
         <label>营业日</label>
         <input type="date" id="dateInput">
       </div>
+      <div class="field">
+        <label>每日商家邮件（本地时间）</label>
+        <input type="time" id="dailyEmailTime" value="00:00">
+      </div>
+      <button class="btn" type="button" id="btnSaveDailyTime">保存发送时刻</button>
+      <button class="btn" type="button" id="btnPreviewDigest">预览每日汇总邮件</button>
       <button class="btn" type="button" id="btnRefresh">刷新看板</button>
       <button class="btn ghost" type="button" id="btnExport">导出数据</button>
       <button class="btn danger" type="button" id="btnReset">清空本店测试数据</button>
@@ -32,7 +38,7 @@
     <div class="grid-stack">
       <section class="card card-board">
         <h2>床位时间轴（预约 + 商家关闭）</h2>
-        <p class="hint">空档拖选可新建；点击已有色块选中后，可拖动移动，左右拉改时长，上下拉改床数。渠道默认 WhatsApp。</p>
+        <p class="hint">空档拖选可新建；点预约色块可编辑（预占可选「转为预约」）。点灰色/青绿关闭块可申请开床（不能直接打开）。渠道默认 WhatsApp。</p>
         <div id="board"></div>
       </section>
 
@@ -54,7 +60,7 @@
 
     <section class="card" style="margin-top:1rem" id="emailPanel">
       <h2>商家邮件 / 日历同步</h2>
-      <p class="hint">确认或改期后在此预览。点「发送邮件并同步日历」会发信到商家，并写入对应 Google 日历（格式对齐现有手工录入）。需本机 <code>server</code> 网关在跑。</p>
+      <p class="hint">确认或改期后在此预览；正文可直接编辑后再发送。点发送会发信到商家，并按需重写当日 Google 日历。每日汇总需本机 <code>server</code> 网关常开，并在上方设定发送时刻。</p>
       <div class="email-box" id="emailBox">
         <div class="hint">暂无预览。创建并确认订单后显示。</div>
       </div>
@@ -65,12 +71,11 @@
   <div class="ctx-menu" id="sidePanel" aria-hidden="true" hidden>
     <div class="ctx-menu-head">
       <div>
-        <strong>预约编辑</strong>
+        <strong id="sideTitle">预约编辑</strong>
         <p class="hint" id="sideHint" style="margin:0">选中后可在此修改</p>
       </div>
-      <button type="button" class="side-x" id="btnSideCloseTop" aria-label="关闭">×</button>
     </div>
-    <div class="ctx-menu-body">
+    <div class="ctx-menu-body" id="sideBodyBooking">
       <div class="side-field"><label>开始时间</label><input id="startTime" type="time"></div>
       <div class="side-field"><label>时长(分)</label><input id="duration" type="number" min="30" step="30" value="60"></div>
       <div class="side-field"><label>人数（跨床拖选会自动填）</label><input id="guests" type="number" min="1" max="5" value="1"></div>
@@ -83,11 +88,17 @@
       <p class="hint warn" id="multiHint">≥2 人创建后为「待确认」，需再点确认才出邮件预览。</p>
       <div class="err" id="sideErr"></div>
     </div>
+    <div class="ctx-menu-body" id="sideBodyOpenReq" hidden>
+      <p class="hint" id="openReqDetail" style="margin:0">商家已关闭该床位时段。客服不可直接开床，可发起开床申请。</p>
+      <div class="side-field"><label>申请备注（可选）</label><textarea id="openReqNote" placeholder="如：客人指定该床 / 临时加单"></textarea></div>
+      <div class="err" id="openReqErr"></div>
+    </div>
     <div class="ctx-menu-foot">
       <button type="button" class="btn" id="btnHold">仅预占</button>
       <button type="button" class="btn primary" id="btnCreate">创建预约</button>
+      <button type="button" class="btn primary" id="btnConvertHold" hidden>转为预约</button>
       <button type="button" class="btn danger" id="btnDeleteBooking" hidden>删除预约</button>
-      <button type="button" class="btn ghost" id="btnSideClose">关闭</button>
+      <button type="button" class="btn primary" id="btnRequestOpen" hidden>申请开床并拟邮件</button>
     </div>
   </div>
 

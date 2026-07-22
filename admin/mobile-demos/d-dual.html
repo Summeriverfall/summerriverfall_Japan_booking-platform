@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>方案 D · 双视图</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <div class="phone-shell">
+    <header class="demo-top">
+      <div class="scheme">方案 D</div>
+      <h1>概览 / 列表 切换</h1>
+      <div class="sub">时间轴只读 · 编辑走列表</div>
+      <nav class="demo-nav" id="nav"></nav>
+    </header>
+    <div class="pad">
+      <div class="seg" id="seg">
+        <button type="button" class="on" data-v="map">占用概览</button>
+        <button type="button" data-v="list">操作列表</button>
+      </div>
+
+      <div id="viewMap">
+        <div class="card">
+          <p class="hint">只读：左右滑查看。要点「关/开」请切到操作列表。</p>
+          <div id="mapRows" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <div id="viewList" hidden>
+        <div class="card">
+          <h2>开床申请</h2>
+          <div class="list-item">
+            <div class="t">4号床 · 16:00–17:00</div>
+            <div class="m">客服申请 · 客人指定该床</div>
+            <div class="actions">
+              <button type="button" class="btn primary act">同意开床</button>
+              <button type="button" class="btn danger act">拒绝</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>关闭记录</h2>
+          <div class="list-item">
+            <div class="t">2号床 · 18:00–18:30</div>
+            <div class="m">商家手动关闭</div>
+            <div class="actions">
+              <button type="button" class="btn act">改时段</button>
+              <button type="button" class="btn danger act">打开释放</button>
+            </div>
+          </div>
+          <button type="button" class="btn primary block act" style="margin-top:4px">＋ 新建关闭</button>
+        </div>
+        <div class="card">
+          <h2>预约（只读）</h2>
+          <div class="list-item">
+            <div class="t">2号床 · 14:00–15:00</div>
+            <div class="m">已确认 · 身体按摩</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="demo-common.js"></script>
+  <script>
+    const { BEDS, STATE, slotCount, toast, navHtml } = MobileDemo;
+    document.getElementById('nav').innerHTML = navHtml('d-dual.html');
+    const n = slotCount();
+
+    const mapRows = document.getElementById('mapRows');
+    mapRows.innerHTML = BEDS.map((name, bi) => {
+      const row = STATE[bi] || {};
+      let slots = '';
+      for (let i = 0; i < n; i++) {
+        const v = row[i];
+        let cls = 'slot';
+        if (v === 1) cls += ' booked';
+        if (v === 2) cls += ' closed';
+        if (v === 3) cls += ' request';
+        slots += `<div class="${cls}" style="height:36px;pointer-events:none"></div>`;
+      }
+      return `<div style="margin-bottom:8px">
+        <div class="hint" style="margin-bottom:2px">${name}</div>
+        <div class="slot-grid">${slots}</div>
+      </div>`;
+    }).join('');
+
+    const seg = document.getElementById('seg');
+    seg.onclick = (e) => {
+      const b = e.target.closest('[data-v]');
+      if (!b) return;
+      seg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+      const v = b.dataset.v;
+      document.getElementById('viewMap').hidden = v !== 'map';
+      document.getElementById('viewList').hidden = v !== 'list';
+    };
+    document.querySelectorAll('.act').forEach((btn) => {
+      btn.onclick = () => toast('演示：' + btn.textContent.trim());
+    });
+  </script>
+</body>
+</html>

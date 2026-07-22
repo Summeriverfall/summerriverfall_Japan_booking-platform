@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>方案 B · 点选时间轴</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <div class="phone-shell">
+    <header class="demo-top">
+      <div class="scheme">方案 B</div>
+      <h1>点选关床 · 不拖拽</h1>
+      <div class="sub">先点开始格，再点结束格 · 可横滑</div>
+      <nav class="demo-nav" id="nav"></nav>
+    </header>
+    <div class="pad">
+      <div class="card">
+        <p class="hint" id="hint">请点选开始时间格</p>
+        <div class="field" style="margin-top:8px">
+          <label>操作床位</label>
+          <div class="chip-row" id="beds"></div>
+        </div>
+        <div class="hours" id="hours"></div>
+        <div class="slot-grid" id="grid" style="margin-top:4px"></div>
+        <p class="hint" style="margin-top:8px">
+          <span class="lg b"></span>已约
+          <span class="lg g"></span>已关
+          <span class="lg t"></span>申请
+          · 绿框为当前选区
+        </p>
+        <div class="btn-row" style="margin-top:10px">
+          <button type="button" class="btn" id="btnClear">清除选区</button>
+          <button type="button" class="btn primary" id="btnClose">关闭选区</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>其它床占用（缩略）</h2>
+        <div id="mini"></div>
+      </div>
+    </div>
+  </div>
+  <script src="demo-common.js"></script>
+  <script>
+    const { BEDS, STATE, slotCount, slotLabel, toast, navHtml } = MobileDemo;
+    document.getElementById('nav').innerHTML = navHtml('b-tap.html');
+    let bed = 1;
+    let pickStart = null;
+    let pickEnd = null;
+    const n = slotCount();
+
+    document.getElementById('hours').innerHTML = MobileDemo.HOURS.map(
+      (h) => `<div class="hour-cell">${h}</div>`
+    ).join('');
+
+    const bedsEl = document.getElementById('beds');
+    bedsEl.innerHTML = BEDS.map((name, i) =>
+      `<button type="button" class="chip ${i === bed ? 'on' : ''}" data-i="${i}">${name}</button>`
+    ).join('');
+    bedsEl.onclick = (e) => {
+      const b = e.target.closest('[data-i]');
+      if (!b) return;
+      bed = Number(b.dataset.i);
+      pickStart = pickEnd = null;
+      bedsEl.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', Number(c.dataset.i) === bed));
+      render();
+    };
+
+    function inPick(i) {
+      if (pickStart == null) return false;
+      if (pickEnd == null) return i === pickStart;
+      const a = Math.min(pickStart, pickEnd);
+      const b = Math.max(pickStart, pickEnd);
+      return i >= a && i <= b;
+    }
+
+    function render() {
+      const grid = document.getElementById('grid');
+      const row = STATE[bed] || {};
+      grid.innerHTML = '';
+      for (let i = 0; i < n; i++) {
+        const s = document.createElement('button');
+        s.type = 'button';
+        s.className = 'slot';
+        s.title = slotLabel(i);
+        const v = row[i];
+        if (v === 1) s.classList.add('booked');
+        if (v === 2) s.classList.add('closed');
+        if (v === 3) s.classList.add('request');
+        if (inPick(i)) {
+          if (i === pickStart || i === pickEnd) s.classList.add('pick');
+          else s.classList.add('mid');
+        }
+        s.onclick = () => {
+          if (v === 1) {
+            toast('该格已有预约，演示中不可关');
+            return;
+          }
+          if (pickStart == null || (pickStart != null && pickEnd != null)) {
+            pickStart = i;
+            pickEnd = null;
+            document.getElementById('hint').textContent = `已选开始 ${slotLabel(i)}，再点结束格`;
+          } else {
+            pickEnd = i;
+            const a = Math.min(pickStart, pickEnd);
+            const b = Math.max(pickStart, pickEnd);
+            document.getElementById('hint').textContent = `选区 ${slotLabel(a)} – ${slotLabel(b + 1)}`;
+          }
+          render();
+        };
+        grid.appendChild(s);
+      }
+
+      document.getElementById('mini').innerHTML = BEDS.map((name, bi) => {
+        if (bi === bed) return '';
+        const keys = Object.keys(STATE[bi] || {});
+        if (!keys.length) return `<p class="hint">${name}：空闲</p>`;
+        return `<p class="hint">${name}：有 ${keys.length} 格占用</p>`;
+      }).join('');
+    }
+
+    document.getElementById('btnClear').onclick = () => {
+      pickStart = pickEnd = null;
+      document.getElementById('hint').textContent = '请点选开始时间格';
+      render();
+    };
+    document.getElementById('btnClose').onclick = () => {
+      if (pickStart == null) return toast('请先点选时段');
+      const a = Math.min(pickStart, pickEnd == null ? pickStart : pickEnd);
+      const b = Math.max(pickStart, pickEnd == null ? pickStart : pickEnd);
+      toast(`演示：关闭 ${BEDS[bed]} ${slotLabel(a)}–${slotLabel(b + 1)}`);
+    };
+    render();
+  </script>
+</body>
+</html>

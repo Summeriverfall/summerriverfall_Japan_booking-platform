@@ -126,9 +126,11 @@
         const start = timeToOffset(c.startTime);
         const end = timeToOffset(c.endTime);
         const beds = c.beds && c.beds.length ? c.beds : allBedIndexes();
+        const type =
+          c.openRequestStatus === 'requested' ? 'closure_request' : 'closure';
         beds.forEach((bedIndex) => {
           items.push({
-            type: 'closure',
+            type,
             bedIndex,
             start,
             end,
@@ -264,7 +266,7 @@
       beds,
       courseId: input.courseId || '',
       channelId: input.channelId || 'whatsapp',
-      guestName: input.guestName || (mode === 'hold' ? '预占' : ''),
+      guestName: input.guestName || '',
       guestPhone: input.guestPhone || '',
       note: input.note || '',
       status,
@@ -279,6 +281,13 @@
     return { ok: true, booking, needConfirm, mode };
   }
 
+  function normalizeGuestName(name) {
+    const s = String(name || '').trim();
+    // 旧数据曾把占位词写进姓名字段
+    if (!s || s === '预占') return '';
+    return s;
+  }
+
   /** 预占 → 正式预约（可补全信息；≥2 人仍进待确认） */
   function convertHoldToBooking(id, patch) {
     const state = load();
@@ -287,6 +296,7 @@
     if (b.status !== 'hold') return { ok: false, error: '仅预占单可转预约' };
 
     Object.assign(b, patch || {});
+    b.guestName = normalizeGuestName(b.guestName);
     const guests = Number(b.guests) || 1;
     const needConfirm = guests >= CFG().confirmGuestsThreshold;
     b.status = needConfirm ? 'pending_confirm' : 'confirmed';
@@ -431,8 +441,60 @@
     if (!c) return { ok: false, error: '找不到关闭记录' };
     c.active = false;
     c.releasedAt = new Date().toISOString();
+    if (c.openRequestStatus === 'requested') {
+      c.openRequestStatus = 'approved';
+      c.openResolvedAt = c.releasedAt;
+    }
     save(state);
     return { ok: true, closure: c };
+  }
+
+  /** 客服：对已关闭床位发起开床申请（不能直接打开） */
+  function requestOpenBed(id, note) {
+    const state = load();
+    const c = state.closures.find((x) => x.id === id && x.active !== false);
+    if (!c) return { ok: false, error: '找不到关闭记录' };
+    c.openRequestStatus = 'requested';
+    c.openRequestedAt = new Date().toISOString();
+    c.openRequestNote = note != null ? String(note) : c.openRequestNote || '';
+    save(state);
+    return { ok: true, closure: c };
+  }
+
+  /** 商家：同意（开床）或拒绝开床申请 */
+  function respondOpenRequest(id, approve, note) {
+    const state = load();
+    const c = state.closures.find((x) => x.id === id && x.active !== false);
+    if (!c) return { ok: false, error: '找不到关闭记录' };
+    if (c.openRequestStatus !== 'requested') {
+      return { ok: false, error: '该关闭块当前没有待处理的开床申请' };
+    }
+    if (approve) {
+      return releaseClosure(id);
+    }
+    c.openRequestStatus = 'rejected';
+    c.openRejectedAt = new Date().toISOString();
+    c.openRejectNote = note != null ? String(note) : '';
+    save(state);
+    return { ok: true, closure: c };
+  }
+
+  function getDailyEmailTime() {
+    const meta = load().meta || {};
+    const fromStore = CFG().dailyEmailTime || '00:00';
+    return meta.dailyEmailTime || fromStore;
+  }
+
+  function setDailyEmailTime(hhmm) {
+    const state = load();
+    const m = String(hhmm || '').trim();
+    if (!/^\d{2}:\d{2}$/.test(m)) {
+      return { ok: false, error: '时间格式应为 HH:MM' };
+    }
+    state.meta = state.meta || {};
+    state.meta.dailyEmailTime = m;
+    save(state);
+    return { ok: true, dailyEmailTime: m };
   }
 
   function updateClosure(id, patch) {
@@ -533,6 +595,10 @@
     setClosure,
     releaseClosure,
     updateClosure,
+    requestOpenBed,
+    respondOpenRequest,
+    getDailyEmailTime,
+    setDailyEmailTime,
     listBookings,
     listClosures,
     appendEmailLog,

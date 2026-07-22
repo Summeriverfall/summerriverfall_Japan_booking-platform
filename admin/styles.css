@@ -6,8 +6,11 @@
   --line: #e5ddd3;
   --gold: #b8956b;
   --blue: #2f6fed;
+  /* 已确认预约：低彩度淡蓝，避免压过「本单」绿色 */
+  --blue-soft: #9bb8d9;
   --amber: #d97706;
   --gray: #6b7280;
+  --teal-request: #0f766e;
   --green: #1e8e4f;
   --red: #c0392b;
   --card: #fff;
@@ -131,6 +134,13 @@ a:hover { text-decoration: underline; }
 .board-corner, .board-label {
   display: flex; align-items: center; font-size: .8rem; color: var(--muted); padding: .25rem .4rem;
 }
+.board-label {
+  height: 42px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 .5rem;
+  align-self: stretch;
+}
 .board-hours {
   display: flex;
   width: 100%;
@@ -238,6 +248,24 @@ a:hover { text-decoration: underline; }
 .board-block.type-pending { background: var(--amber); }
 .board-block.type-hold { background: #7c3aed; }
 .board-block.type-closure { background: var(--gray); }
+.board-block.type-closure_request {
+  background: var(--teal-request);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.25);
+}
+.board-label.is-clickable {
+  cursor: pointer;
+  border-radius: 0;
+  transition: background .15s ease, color .15s ease;
+}
+.board-label.is-clickable:hover,
+.board-label.is-clickable:focus-visible {
+  background: rgba(139, 105, 50, 0.16);
+  color: var(--ink);
+  outline: none;
+}
+.board-label.is-clickable:active {
+  background: rgba(139, 105, 50, 0.24);
+}
 .blk-handle {
   position: absolute;
   z-index: 7;
@@ -292,9 +320,50 @@ a:hover { text-decoration: underline; }
   margin-top: .75rem; border: 1px dashed #d2c4b4; border-radius: 10px; padding: .75rem; background: #f8f3ec;
 }
 .email-box img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; margin-top: .5rem; background: #fff; }
-.email-box pre {
+.email-box .mail-subject-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem;
+}
+.email-box .mail-subject-view {
+  cursor: text;
+  border-bottom: 1px dashed transparent;
+}
+.email-box .mail-subject-view:hover {
+  border-bottom-color: var(--gold);
+}
+.email-box .mail-subject-edit {
+  width: min(100%, 520px);
+  padding: .3rem .45rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  background: #fff;
+}
+.email-box .mail-subject-edit:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.email-box pre.mail-body-view,
+.email-box textarea.mail-body-edit {
   white-space: pre-wrap; font-family: inherit; font-size: .82rem; background: #fff;
   border: 1px solid var(--line); border-radius: 8px; padding: .65rem; margin-top: .4rem;
+  width: 100%; line-height: 1.45; color: var(--ink);
+}
+.email-box pre.mail-body-view {
+  min-height: 0;
+  cursor: text;
+  max-height: none;
+  overflow: visible;
+}
+.email-box pre.mail-body-view:hover {
+  border-color: var(--gold);
+}
+.email-box textarea.mail-body-edit {
+  min-height: 220px;
+  resize: vertical;
+}
+.email-box textarea.mail-body-edit:focus {
+  outline: none;
+  border-color: var(--gold);
 }
 
 .hub-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
@@ -419,6 +488,9 @@ a:hover { text-decoration: underline; }
   flex-direction: column;
   gap: .55rem;
 }
+.ctx-menu-body[hidden] {
+  display: none !important;
+}
 .side-field { display: flex; flex-direction: column; gap: .22rem; }
 .side-field label { font-size: .72rem; color: var(--muted); }
 .side-field input,
@@ -440,16 +512,33 @@ a:hover { text-decoration: underline; }
   border-color: var(--gold);
 }
 .ctx-menu-foot {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: .4rem;
   padding: .65rem .75rem .75rem;
   border-top: 1px solid var(--line);
   background: #f3ebe2;
 }
-.ctx-menu-foot .btn.ghost { grid-column: 1 / -1; }
-.ctx-menu-foot .btn.danger { grid-column: 1 / -1; }
-.ctx-menu-foot .btn { padding: .4rem .55rem; font-size: .84rem; border-radius: 6px; }
+.ctx-menu-foot .btn {
+  width: 100%;
+  padding: .45rem .55rem;
+  font-size: .84rem;
+  border-radius: 6px;
+}
+.ctx-menu-foot .btn[hidden] { display: none !important; }
+/* 新建时：「仅预占」与「创建预约」并排且等宽 */
+.ctx-menu-foot:has(#btnHold:not([hidden])):has(#btnCreate:not([hidden])) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.ctx-menu-foot:has(#btnHold:not([hidden])):has(#btnCreate:not([hidden])) #btnConvertHold,
+.ctx-menu-foot:has(#btnHold:not([hidden])):has(#btnCreate:not([hidden])) #btnDeleteBooking,
+.ctx-menu-foot:has(#btnHold:not([hidden])):has(#btnCreate:not([hidden])) #btnRequestOpen,
+.ctx-menu-foot:has(#btnHold:not([hidden])):has(#btnCreate:not([hidden])) #btnApproveOpen,
+.ctx-menu-foot:has(#btnHold:not([hidden])):has(#btnCreate:not([hidden])) #btnRejectOpen,
+.ctx-menu-foot:has(#btnHold:not([hidden])):has(#btnCreate:not([hidden])) #btnRelease {
+  grid-column: 1 / -1;
+}
 
 /* 兼容旧类名，避免残留样式把菜单拉满屏 */
 .side-panel,
@@ -463,4 +552,215 @@ a:hover { text-decoration: underline; }
   box-shadow: none;
   border: none;
   background: transparent;
+}
+
+/* —— 商家端手机（方案 E）—— */
+.m-only { display: none !important; }
+
+@media (max-width: 768px) {
+  .page-merchant .m-only { display: block !important; }
+  .page-merchant .desk-only { display: none !important; }
+  .page-merchant .m-dock.m-only { display: grid !important; }
+  .page-merchant .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: .5rem;
+    padding: .75rem .9rem;
+  }
+  .page-merchant .nav { width: 100%; }
+  .page-merchant .nav a {
+    flex: 1;
+    justify-content: center;
+    padding: .5rem .4rem;
+    font-size: .78rem;
+  }
+  .page-merchant .brand { font-size: .95rem; }
+  .page-merchant .wrap {
+    padding: .75rem .85rem calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  .page-merchant .topbar .nav { display: none; }
+  .page-merchant .toolbar {
+    gap: .5rem;
+  }
+  .page-merchant .toolbar .field { min-width: 0; flex: 1; }
+  .page-merchant .toolbar #remainHint { display: none; }
+  .page-merchant .card { padding: .85rem .9rem; border-radius: 12px; }
+  .page-merchant .card h2 { font-size: .98rem; margin-bottom: .5rem; }
+
+  /* 联动时间表：单一横向滚动 */
+  .m-timeline {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #faf7f2;
+    overflow: hidden;
+  }
+  .m-timeline-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .m-timeline-inner {
+    display: block;
+    min-width: min-content;
+  }
+  .m-tl-row {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--line);
+  }
+  .m-tl-row:last-child { border-bottom: none; }
+  .m-tl-corner,
+  .m-tl-label {
+    flex: 0 0 52px;
+    width: 52px;
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    border: none;
+    border-right: 1px solid var(--line);
+    border-radius: 0;
+    box-shadow: none;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .72rem;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .m-tl-corner {
+    background: #f3eee6;
+    color: var(--muted);
+  }
+  .m-tl-label {
+    background: #fffcf8;
+    color: var(--ink);
+    cursor: pointer;
+    min-height: 44px;
+    height: 44px;
+    align-self: stretch;
+  }
+  .m-tl-label:hover {
+    background: rgba(139, 105, 50, 0.16);
+  }
+  .m-tl-label:active { background: rgba(139, 105, 50, 0.24); }
+  .m-tl-label:focus { outline: none; }
+  .m-tl-hours,
+  .m-tl-track {
+    display: flex;
+    flex: 0 0 auto;
+  }
+  .m-tl-hour {
+    flex: 0 0 56px;
+    width: 56px;
+    text-align: center;
+    font-size: .68rem;
+    color: var(--muted);
+    padding: 6px 0;
+    border-right: 1px solid #eee5da;
+    background: #f3eee6;
+  }
+  .m-tl-slot {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 44px;
+    border: none;
+    border-right: 1px solid #eee5da;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+  }
+  .m-tl-slot:active { filter: brightness(0.96); }
+  .m-tl-slot.is-booking { background: var(--blue); }
+  .m-tl-slot.is-pending { background: var(--amber); }
+  .m-tl-slot.is-hold { background: #7c3aed; }
+  .m-tl-slot.is-closure { background: var(--gray); }
+  .m-tl-slot.is-closure_request { background: var(--teal-request); }
+  .m-tl-slot.is-pick {
+    background: rgba(30, 142, 79, 0.35);
+    box-shadow: inset 0 0 0 2px var(--green);
+  }
+  .m-tl-slot.is-pick-mid { background: rgba(30, 142, 79, 0.2); }
+
+  /* 底栏 */
+  .m-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    background: rgba(255, 252, 248, 0.96);
+    border-top: 1px solid var(--line);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    backdrop-filter: blur(8px);
+  }
+  .m-dock button {
+    border: none;
+    background: transparent;
+    font: inherit;
+    font-size: .72rem;
+    color: var(--muted);
+    padding: 8px 4px;
+    cursor: pointer;
+    min-height: 56px;
+  }
+  .m-dock-ico {
+    display: block;
+    font-size: 1.1rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+  }
+  .m-dock button.is-on {
+    color: #8a6a3e;
+    font-weight: 600;
+  }
+  .m-dock button.is-on .m-dock-ico { filter: none; }
+
+  /* 底部弹层（复用 ctx-menu） */
+  .page-merchant .m-sheet-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  .page-merchant .m-sheet-scrim[hidden] { display: none !important; }
+  .page-merchant .ctx-menu.is-open {
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: none;
+    max-height: min(78vh, 640px);
+    border-radius: 16px 16px 0 0;
+    z-index: 100;
+  }
+  .page-merchant .side-x {
+    border: none;
+    background: transparent;
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 0 .2rem;
+  }
+
+  #mPendingRequests .list-item {
+    margin-top: 8px;
+  }
+  #mPendingRequests .item,
+  #sideRequestList .item {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: .65rem .75rem;
+    margin-top: .5rem;
+    background: #fffcf8;
+  }
+  .ctx-menu-body[hidden] { display: none !important; }
 }

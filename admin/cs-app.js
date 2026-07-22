@@ -22,11 +22,22 @@
   const remainHint = document.getElementById('remainHint');
   const sidePanel = document.getElementById('sidePanel');
   const sideHint = document.getElementById('sideHint');
+  const sideTitle = document.getElementById('sideTitle');
   const sideBeds = document.getElementById('sideBeds');
+  const sideBodyBooking = document.getElementById('sideBodyBooking');
+  const sideBodyOpenReq = document.getElementById('sideBodyOpenReq');
+  const dailyEmailTimeEl = document.getElementById('dailyEmailTime');
   let lastPointer = { x: 80, y: 120 };
 
   let rangeSelection = null;
   let selectedBookingId = null;
+  let selectedClosureId = null;
+  /** 'booking' | 'openRequest' */
+  let sideMode = 'booking';
+
+  if (dailyEmailTimeEl) {
+    dailyEmailTimeEl.value = BookingStore.getDailyEmailTime() || '00:00';
+  }
 
   function fillSelects() {
     document.getElementById('course').innerHTML = STORE_CONFIG.courses
@@ -44,7 +55,8 @@
     document.getElementById('guests').value = String(b.guests || (b.beds || []).length || 1);
     document.getElementById('course').value = b.courseId || '';
     document.getElementById('channel').value = b.channelId || 'whatsapp';
-    document.getElementById('guestName').value = b.guestName || '';
+    document.getElementById('guestName').value =
+      b.guestName && b.guestName !== '预占' ? b.guestName : '';
     document.getElementById('guestPhone').value = b.guestPhone || '';
     document.getElementById('note').value = b.note || '';
     renderSideBeds(b.beds || []);
@@ -71,11 +83,11 @@
   }
 
   function getMenuAnchorRect() {
-    if (selectedBookingId) {
+    const selectedId = selectedBookingId || selectedClosureId;
+    const attr = selectedBookingId ? 'data-booking-id' : 'data-closure-id';
+    if (selectedId) {
       const blocks = [
-        ...document.querySelectorAll(
-          `.board-block[data-booking-id="${selectedBookingId}"]`
-        ),
+        ...document.querySelectorAll(`.board-block[${attr}="${selectedId}"]`),
       ];
       if (blocks.length) {
         let left = Infinity;
@@ -150,6 +162,15 @@
     sidePanel.style.top = `${top}px`;
   }
 
+  function setSideMode(mode) {
+    sideMode = mode === 'openRequest' ? 'openRequest' : 'booking';
+    if (sideBodyBooking) sideBodyBooking.hidden = sideMode !== 'booking';
+    if (sideBodyOpenReq) sideBodyOpenReq.hidden = sideMode !== 'openRequest';
+    if (sideTitle) {
+      sideTitle.textContent = sideMode === 'openRequest' ? '开床申请' : '预约编辑';
+    }
+  }
+
   function openSide(msg, point) {
     if (msg) sideHint.textContent = msg;
     if (point && point.x != null) {
@@ -158,20 +179,45 @@
     const createBtn = document.getElementById('btnCreate');
     const holdBtn = document.getElementById('btnHold');
     const deleteBtn = document.getElementById('btnDeleteBooking');
+    const convertBtn = document.getElementById('btnConvertHold');
+    const requestOpenBtn = document.getElementById('btnRequestOpen');
+
+    if (sideMode === 'openRequest') {
+      setSideMode('openRequest');
+      if (createBtn) createBtn.hidden = true;
+      if (holdBtn) holdBtn.hidden = true;
+      if (deleteBtn) deleteBtn.hidden = true;
+      if (convertBtn) convertBtn.hidden = true;
+      if (requestOpenBtn) {
+        requestOpenBtn.hidden = false;
+        const c =
+          BookingStore.listClosures(currentDate()).find((x) => x.id === selectedClosureId) ||
+          {};
+        requestOpenBtn.textContent =
+          c.openRequestStatus === 'requested' ? '重拟开床申请邮件' : '申请开床并拟邮件';
+      }
+      requestAnimationFrame(() => placeCtxMenu());
+      return;
+    }
+
+    setSideMode('booking');
+    const booking = selectedBookingId
+      ? BookingStore.load().bookings.find((b) => b.id === selectedBookingId)
+      : null;
+    const isHold = booking && booking.status === 'hold';
+
     if (createBtn) {
+      // 预占只显示「转为预约 / 释放」，不提供保存修改；转成预约后再改
+      createBtn.hidden = isHold;
       createBtn.textContent = selectedBookingId ? '保存修改' : '创建预约';
     }
     if (holdBtn) holdBtn.hidden = Boolean(selectedBookingId);
+    if (convertBtn) convertBtn.hidden = !isHold;
+    if (requestOpenBtn) requestOpenBtn.hidden = true;
     if (deleteBtn) {
       deleteBtn.hidden = !selectedBookingId;
-      deleteBtn.textContent =
-        selectedBookingId &&
-        (BookingStore.load().bookings.find((b) => b.id === selectedBookingId) || {}).status ===
-          'hold'
-          ? '释放预占'
-          : '删除预约';
+      deleteBtn.textContent = isHold ? '释放预占' : '删除预约';
     }
-    // 等 DOM/勾选床位渲染后再定位，避免贴边计算偏差
     requestAnimationFrame(() => placeCtxMenu());
   }
 
@@ -294,40 +340,146 @@
     }
   }
 
-  function showEmail(booking, eventType) {
-    const draft = BoardUI.buildEmailDraft(booking, eventType);
-    const calDraft = BoardUI.buildCalendarDraft(booking, eventType);
+  function showEmail(booking, eventType, customDraft) {
+    const draft =
+      customDraft ||
+      (eventType === 'open_request'
+        ? BoardUI.buildOpenRequestEmail(booking)
+        : eventType === 'daily'
+          ? BoardUI.buildDailyDigestEmail(booking.date || currentDate())
+          : BoardUI.buildEmailDraft(booking, eventType));
+    const skipCalendar =
+      eventType === 'cancel' ||
+      eventType === 'open_request' ||
+      eventType === 'daily';
+    const calDraft =
+      booking && booking.id && !skipCalendar
+        ? BoardUI.buildCalendarDraft(booking, eventType)
+        : null;
     const to = STORE_CONFIG.merchantEmail || '';
     const calHint = STORE_CONFIG.googleCalendarId
       ? `日历：${escapeHtml(STORE_CONFIG.googleCalendarName || STORE_CONFIG.googleCalendarId)}`
       : '日历：尚未配置 googleCalendarId';
+    const dateKey = (booking && booking.date) || currentDate();
+    const sendLabel =
+      eventType === 'cancel'
+        ? '发送取消邮件'
+        : eventType === 'open_request'
+          ? '发送开床申请邮件'
+          : eventType === 'daily'
+            ? '立即发送每日汇总'
+            : '发送邮件并重写当日日历';
     emailBox.innerHTML = `
-      <div><strong>主题：</strong>${escapeHtml(draft.subject)}</div>
+      <div class="mail-subject-row">
+        <strong>主题：</strong>
+        <span class="mail-subject-view" id="mailSubjectView" title="点击编辑主题">${escapeHtml(
+          draft.subject
+        )}</span>
+        <input class="mail-subject-edit" id="mailSubjectEdit" hidden value="${escapeHtml(
+          draft.subject
+        )}">
+      </div>
       <div class="hint" style="margin-top:.35rem">发件：${escapeHtml(
         (window.EMAIL_CONFIG && window.EMAIL_CONFIG.fromLabel) || 'summerriverfall@gmail.com'
       )} → 收件：${escapeHtml(to || '（待配置商家邮箱）')} · ${calHint}</div>
       <div class="hint" style="margin-top:.25rem">${
         eventType === 'cancel'
           ? '删除时已尝试同步移除日历事件；此处可再发取消邮件通知商家'
-          : `日历标题预览：${escapeHtml(calDraft.summary)}`
+          : eventType === 'open_request'
+            ? '开床申请不会改日历；发送后请商家在商家端处理'
+            : eventType === 'daily'
+              ? '每日汇总不会改日历；也可由网关按设定时刻自动发送'
+              : `日历标题预览：${escapeHtml((calDraft && calDraft.summary) || '')}`
       }</div>
-      <pre>${escapeHtml(draft.body)}</pre>
+      <div class="hint" style="margin-top:.35rem">正文（点击后可编辑）：</div>
+      <pre class="mail-body-view" id="mailBodyView" title="点击编辑正文">${escapeHtml(
+        draft.body
+      )}</pre>
+      <textarea class="mail-body-edit" id="mailBodyEdit" hidden></textarea>
       <div class="hint">床位使用时段状态图（将随邮件发送）：</div>
       <img alt="床位状态图" src="${draft.chartDataUrl}">
       <div class="actions" style="margin-top:.6rem;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
-        <button class="btn primary" type="button" id="btnSendMail">${
-          eventType === 'cancel' ? '发送取消邮件' : '发送邮件并同步日历'
-        }</button>
-        <a class="btn" download="bed-status-${booking.date}.png" href="${draft.chartDataUrl}">下载状态图</a>
+        <button class="btn primary" type="button" id="btnSendMail">${sendLabel}</button>
+        <a class="btn" download="bed-status-${dateKey}.png" href="${draft.chartDataUrl}">下载状态图</a>
         <button class="btn" type="button" id="btnCopyMail">复制邮件正文</button>
         <span class="hint" id="mailSendStatus">需本机运行 server 通知网关</span>
       </div>
     `;
     const statusEl = document.getElementById('mailSendStatus');
+    const bodyView = document.getElementById('mailBodyView');
+    const bodyEdit = document.getElementById('mailBodyEdit');
+    const subjectView = document.getElementById('mailSubjectView');
+    const subjectEdit = document.getElementById('mailSubjectEdit');
+    let bodyText = draft.body;
+    let subjectText = draft.subject;
+
+    function enterBodyEdit() {
+      if (!bodyView || !bodyEdit || !bodyEdit.hidden) return;
+      bodyEdit.value = bodyText;
+      bodyView.hidden = true;
+      bodyEdit.hidden = false;
+      bodyEdit.focus();
+      bodyEdit.setSelectionRange(bodyEdit.value.length, bodyEdit.value.length);
+    }
+    function leaveBodyEdit() {
+      if (!bodyView || !bodyEdit || bodyEdit.hidden) return;
+      bodyText = bodyEdit.value;
+      bodyView.textContent = bodyText;
+      bodyEdit.hidden = true;
+      bodyView.hidden = false;
+    }
+    function enterSubjectEdit() {
+      if (!subjectView || !subjectEdit || !subjectEdit.hidden) return;
+      subjectEdit.value = subjectText;
+      subjectView.hidden = true;
+      subjectEdit.hidden = false;
+      subjectEdit.focus();
+      subjectEdit.select();
+    }
+    function leaveSubjectEdit() {
+      if (!subjectView || !subjectEdit || subjectEdit.hidden) return;
+      subjectText = subjectEdit.value.trim() || subjectText;
+      subjectView.textContent = subjectText;
+      subjectEdit.hidden = true;
+      subjectView.hidden = false;
+    }
+
+    if (bodyView) bodyView.addEventListener('click', enterBodyEdit);
+    if (subjectView) subjectView.addEventListener('click', enterSubjectEdit);
+    if (bodyEdit) {
+      bodyEdit.addEventListener('blur', leaveBodyEdit);
+      bodyEdit.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          bodyEdit.blur();
+        }
+      });
+    }
+    if (subjectEdit) {
+      subjectEdit.addEventListener('blur', leaveSubjectEdit);
+      subjectEdit.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          subjectEdit.blur();
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          subjectEdit.value = subjectText;
+          subjectEdit.blur();
+        }
+      });
+    }
+
+    const getEditedBody = () =>
+      bodyEdit && !bodyEdit.hidden ? bodyEdit.value : bodyText;
+    const getEditedSubject = () =>
+      subjectEdit && !subjectEdit.hidden
+        ? subjectEdit.value.trim() || subjectText
+        : subjectText;
     const btnCopy = document.getElementById('btnCopyMail');
     if (btnCopy) {
       btnCopy.addEventListener('click', async () => {
-        await navigator.clipboard.writeText(draft.body);
+        await navigator.clipboard.writeText(getEditedBody());
         btnCopy.textContent = '已复制';
       });
     }
@@ -343,8 +495,9 @@
         const parts = [];
         statusEl.className = 'hint';
         statusEl.textContent = '处理中…';
+        const text = getEditedBody();
+        const subject = getEditedSubject();
 
-        // 1) 邮件
         if (!to) {
           parts.push('邮件跳过（未配置收件）');
         } else {
@@ -352,59 +505,96 @@
             statusEl.textContent = '发送邮件中…';
             const result = await EmailClient.sendMerchantMail({
               to,
-              subject: draft.subject,
-              text: draft.body,
+              subject,
+              text,
               chartDataUrl: draft.chartDataUrl,
               storeId: STORE_CONFIG.storeId,
-              bookingId: booking.id,
+              bookingId: (booking && booking.id) || null,
               eventType,
             });
             parts.push(`邮件已发（${result.messageId || 'ok'}）`);
-            BookingStore.appendEmailLog(booking.id, {
-              eventType,
-              mode: 'smtp_sent',
-              to,
-              messageId: result.messageId || null,
-            });
+            if (booking && booking.id) {
+              BookingStore.appendEmailLog(booking.id, {
+                eventType,
+                mode: 'smtp_sent',
+                to,
+                messageId: result.messageId || null,
+              });
+            }
           } catch (err) {
             parts.push(`邮件失败：${(err && err.message) || err}`);
-            BookingStore.appendEmailLog(booking.id, {
-              eventType,
-              mode: 'smtp_failed',
-              to,
-              error: (err && err.message) || String(err),
-            });
+            if (booking && booking.id) {
+              BookingStore.appendEmailLog(booking.id, {
+                eventType,
+                mode: 'smtp_failed',
+                to,
+                error: (err && err.message) || String(err),
+              });
+            }
           }
         }
 
-        // 2) Google 日历
         if (eventType === 'cancel') {
           parts.push('日历已在删除时同步移除');
-        } else {
+        } else if (!skipCalendar && booking) {
           try {
-            statusEl.textContent = '同步 Google 日历中…';
-            const latest =
-              BookingStore.listBookings(booking.date).find((x) => x.id === booking.id) || booking;
-            const cal = BoardUI.buildCalendarDraft(latest, eventType);
-            const calResult = await EmailClient.upsertCalendarEvent(cal);
-            BookingStore.setGoogleEvent(booking.id, {
-              eventId: calResult.eventId,
-              htmlLink: calResult.htmlLink,
-              calendarId: cal.calendarId,
+            statusEl.textContent = '正在重写当日 Google 日历…';
+            const date = booking.date;
+            const calendarId = STORE_CONFIG.googleCalendarId;
+            if (!calendarId) throw new Error('未配置 googleCalendarId');
+
+            const active = BookingStore.listBookings(date).filter(
+              (b) => b.status !== 'cancelled' && b.status !== 'hold'
+            );
+            if (
+              booking.status === 'hold' &&
+              !active.some((b) => b.id === booking.id)
+            ) {
+              active.push(booking);
+            }
+
+            const events = active.map((b) => {
+              const cal = BoardUI.buildCalendarDraft(
+                b,
+                b.id === booking.id ? eventType : 'new'
+              );
+              return {
+                calendarId,
+                bookingId: cal.bookingId,
+                storeId: cal.storeId,
+                summary: cal.summary,
+                description: cal.description,
+                startDateTime: cal.startDateTime,
+                endDateTime: cal.endDateTime,
+                timeZone: cal.timeZone,
+              };
             });
+
+            const calResult = await EmailClient.rewriteCalendarDay({
+              calendarId,
+              date,
+              events,
+            });
+
+            (calResult.events || []).forEach((r, idx) => {
+              const b = active[idx];
+              if (b && r && r.eventId) {
+                BookingStore.setGoogleEvent(b.id, {
+                  eventId: r.eventId,
+                  htmlLink: r.htmlLink,
+                  calendarId,
+                });
+              }
+            });
+
+            const link =
+              (calResult.events || []).find((e) => e.htmlLink) || {};
             parts.push(
-              `日历已${
-                calResult.mode === 'created'
-                  ? '创建'
-                  : calResult.mode === 'updated_deduped'
-                    ? '更新并清理重复'
-                    : '更新'
-              }` +
-                (calResult.removedDuplicates
-                  ? `（删掉旧重复 ${calResult.removedDuplicates} 条）`
-                  : '') +
-                (calResult.htmlLink
-                  ? ` <a href="${calResult.htmlLink}" target="_blank" rel="noopener">打开</a>`
+              `日历已重写当日（清 ${calResult.removed || 0} / 写 ${
+                calResult.written || 0
+              }）` +
+                (link.htmlLink
+                  ? ` <a href="${link.htmlLink}" target="_blank" rel="noopener">打开</a>`
                   : '')
             );
           } catch (err) {
@@ -418,15 +608,40 @@
         btnSend.disabled = false;
       });
     }
-    BookingStore.appendEmailLog(booking.id, { eventType, mode: 'preview_only' });
+    if (booking && booking.id) {
+      BookingStore.appendEmailLog(booking.id, { eventType, mode: 'preview_only' });
+    }
     emailBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async function syncDailyDigestToGateway() {
+    if (!window.EmailClient || !EmailClient.registerDailyDigest) return;
+    const date = BookingStore.todayBusinessDate();
+    const draft = BoardUI.buildDailyDigestEmail(date);
+    const to = STORE_CONFIG.merchantEmail || '';
+    if (!to) return;
+    try {
+      await EmailClient.registerDailyDigest({
+        storeId: STORE_CONFIG.storeId,
+        storeName: STORE_CONFIG.storeName.cn,
+        to,
+        time: BookingStore.getDailyEmailTime() || '00:00',
+        date,
+        subject: draft.subject,
+        text: draft.body,
+        chartDataUrl: draft.chartDataUrl,
+      });
+    } catch (_) {
+      /* 网关未开时忽略 */
+    }
   }
 
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function refresh() {
@@ -435,13 +650,17 @@
     BoardUI.renderBoard(boardEl, date, {
       selection: rangeSelection,
       selectedBookingId,
+      selectedClosureId,
       onClearBookingSelect: () => {
-        if (selectedBookingId) {
-          selectedBookingId = null;
-        }
+        if (selectedBookingId) selectedBookingId = null;
+      },
+      onClearClosureSelect: () => {
+        if (selectedClosureId) selectedClosureId = null;
       },
       onBookingSelect: (booking, point) => {
         selectedBookingId = booking.id;
+        selectedClosureId = null;
+        setSideMode('booking');
         rangeSelection = {
           bedIndex: (booking.beds || [0])[0],
           bedIndexes: (booking.beds || []).slice(),
@@ -464,6 +683,8 @@
           return;
         }
         selectedBookingId = patch.id;
+        selectedClosureId = null;
+        setSideMode('booking');
         rangeSelection = {
           bedIndex: patch.beds[0],
           bedIndexes: patch.beds.slice(),
@@ -483,8 +704,40 @@
           y: patch.clientY,
         });
       },
+      onClosureSelect: (closure, point) => {
+        selectedClosureId = closure.id;
+        selectedBookingId = null;
+        setSideMode('openRequest');
+        rangeSelection = {
+          bedIndex: (closure.beds || [0])[0],
+          bedIndexes: (closure.beds || []).slice(),
+          startOffset: BookingStore.timeToOffset(closure.startTime),
+          endOffset: BookingStore.timeToOffset(closure.endTime),
+        };
+        const names = (closure.beds || [])
+          .map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}号床`)
+          .join('、');
+        const detail = document.getElementById('openReqDetail');
+        if (detail) {
+          detail.textContent =
+            closure.openRequestStatus === 'requested'
+              ? `已申请开床：${names} · ${closure.startTime}–${closure.endTime}（商家尚未处理）`
+              : `商家关闭：${names} · ${closure.startTime}–${closure.endTime}。客服不能直接开床，可发起开床申请。`;
+        }
+        const noteEl = document.getElementById('openReqNote');
+        if (noteEl) noteEl.value = closure.openRequestNote || '';
+        refresh();
+        openSide(
+          closure.openRequestStatus === 'requested'
+            ? '开床申请中 · 可重拟邮件发给商家'
+            : '已选关闭块 · 可申请开床',
+          point
+        );
+      },
       onRangeSelect: (range) => {
         selectedBookingId = null;
+        selectedClosureId = null;
+        setSideMode('booking');
         const beds = range.bedIndexes || [range.bedIndex];
         rangeSelection = {
           bedIndex: beds[0],
@@ -509,12 +762,13 @@
         refresh();
       },
       onBlockClick: (x) => {
-        if (x.ref && x.ref.id && x.type !== 'closure') {
+        if (x.ref && x.ref.id && x.type !== 'closure' && x.type !== 'closure_request') {
           const el = document.querySelector(`[data-id="${x.ref.id}"]`);
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
       },
     });
+    syncDailyDigestToGateway();
 
     if (!rangeSelection) {
       const start = document.getElementById('startTime').value || `${defaultHour}:00`;
@@ -671,15 +925,85 @@
   document.getElementById('btnHold').addEventListener('click', () => doCreate('hold'));
   document.getElementById('btnCreate').addEventListener('click', () => doCreate('create'));
   document.getElementById('btnDeleteBooking').addEventListener('click', () => doDeleteBooking());
-  document.getElementById('btnSideClose').addEventListener('click', closeSide);
-  document.getElementById('btnSideCloseTop').addEventListener('click', closeSide);
 
-  // 点菜单外关闭（像 Windows 右键菜单）
+  document.getElementById('btnConvertHold').addEventListener('click', () => {
+    if (!selectedBookingId) return;
+    const booking = BookingStore.load().bookings.find((b) => b.id === selectedBookingId);
+    if (!booking || booking.status !== 'hold') return;
+    const nameRaw = document.getElementById('guestName').value.trim();
+    const r = BookingStore.convertHoldToBooking(selectedBookingId, {
+      guestName: nameRaw && nameRaw !== '预占' ? nameRaw : '',
+      guestPhone: document.getElementById('guestPhone').value.trim() || booking.guestPhone,
+      courseId: document.getElementById('course').value || booking.courseId,
+      channelId: document.getElementById('channel').value || booking.channelId,
+      note: document.getElementById('note').value.trim() || booking.note,
+      guests: Number(document.getElementById('guests').value) || booking.guests,
+    });
+    if (!r.ok) {
+      sideErr.textContent = r.error || '转换失败';
+      return;
+    }
+    selectedBookingId = r.booking.id;
+    closeSide();
+    refresh();
+    formErr.className = 'hint ok';
+    formErr.textContent = r.needConfirm
+      ? '已转为预约，待人工确认。'
+      : '已转为预约，已生成邮件预览。';
+    if (!r.needConfirm) showEmail(r.booking, 'new');
+  });
+
+  document.getElementById('btnRequestOpen').addEventListener('click', () => {
+    if (!selectedClosureId) return;
+    const noteEl = document.getElementById('openReqNote');
+    const errEl = document.getElementById('openReqErr');
+    if (errEl) errEl.textContent = '';
+    const r = BookingStore.requestOpenBed(
+      selectedClosureId,
+      noteEl ? noteEl.value.trim() : ''
+    );
+    if (!r.ok) {
+      if (errEl) errEl.textContent = r.error || '申请失败';
+      return;
+    }
+    closeSide();
+    refresh();
+    formErr.className = 'hint ok';
+    formErr.textContent = '已发起开床申请，请编辑并发送邮件通知商家。';
+    showEmail(r.closure, 'open_request');
+  });
+
+  const btnSaveDailyTime = document.getElementById('btnSaveDailyTime');
+  if (btnSaveDailyTime) {
+    btnSaveDailyTime.addEventListener('click', () => {
+      const r = BookingStore.setDailyEmailTime(
+        (dailyEmailTimeEl && dailyEmailTimeEl.value) || '00:00'
+      );
+      if (!r.ok) {
+        formErr.className = 'err';
+        formErr.textContent = r.error || '保存失败';
+        return;
+      }
+      formErr.className = 'hint ok';
+      formErr.textContent = `已保存本店每日商家邮件时刻：${r.dailyEmailTime}（需网关常开；客服页打开时会上报当日汇总）`;
+      syncDailyDigestToGateway();
+    });
+  }
+  const btnPreviewDigest = document.getElementById('btnPreviewDigest');
+  if (btnPreviewDigest) {
+    btnPreviewDigest.addEventListener('click', () => {
+      const date = currentDate();
+      showEmail({ date, id: null }, 'daily', BoardUI.buildDailyDigestEmail(date));
+      syncDailyDigestToGateway();
+    });
+  }
+
+  // 点空白关闭悬浮栏
   document.addEventListener('pointerdown', (e) => {
     if (sidePanel.hidden) return;
     if (sidePanel.contains(e.target)) return;
-    // 拖选时间轴时不立刻关掉：选区松手会再打开
     if (e.target.closest && e.target.closest('.board-track')) return;
+    if (e.target.closest && e.target.closest('.board-label')) return;
     closeSide();
   });
   document.addEventListener('keydown', (e) => {
@@ -710,8 +1034,12 @@
     if (!booking) return;
 
     if (act === 'convert') {
+      const nameRaw = document.getElementById('guestName').value.trim();
       const r = BookingStore.convertHoldToBooking(id, {
-        guestName: document.getElementById('guestName').value.trim() || booking.guestName,
+        guestName:
+          (nameRaw && nameRaw !== '预占' ? nameRaw : '') ||
+          (booking.guestName !== '预占' ? booking.guestName : '') ||
+          '',
         guestPhone: document.getElementById('guestPhone').value.trim() || booking.guestPhone,
         courseId: document.getElementById('course').value || booking.courseId,
         channelId: document.getElementById('channel').value || booking.channelId,

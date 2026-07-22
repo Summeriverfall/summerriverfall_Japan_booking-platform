@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>方案 C · 按床切换</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <div class="phone-shell">
+    <header class="demo-top">
+      <div class="scheme">方案 C</div>
+      <h1>一次只看一张床</h1>
+      <div class="sub">顶部切换床位 · 减少纵向长度</div>
+      <nav class="demo-nav" id="nav"></nav>
+    </header>
+    <div class="pad">
+      <div class="bed-tabs" id="tabs"></div>
+      <div class="card">
+        <h2 id="bedTitle">2号床</h2>
+        <p class="hint">点格选择关闭时段（与方案 B 相同点选逻辑）</p>
+        <div class="hours" id="hours" style="margin-top:8px"></div>
+        <div class="slot-grid" id="grid" style="margin-top:4px"></div>
+        <div class="btn-row" style="margin-top:12px">
+          <button type="button" class="btn" id="btnDay">整日关闭此床</button>
+          <button type="button" class="btn primary" id="btnClose">关闭选区</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>此床记录</h2>
+        <div id="records"></div>
+      </div>
+    </div>
+  </div>
+  <script src="demo-common.js"></script>
+  <script>
+    const { BEDS, STATE, slotCount, slotLabel, toast, navHtml } = MobileDemo;
+    document.getElementById('nav').innerHTML = navHtml('c-bed.html');
+    let bed = 1;
+    let pickStart = null;
+    let pickEnd = null;
+    const n = slotCount();
+
+    document.getElementById('hours').innerHTML = MobileDemo.HOURS.map(
+      (h) => `<div class="hour-cell">${h}</div>`
+    ).join('');
+
+    const tabs = document.getElementById('tabs');
+    tabs.innerHTML = BEDS.map((name, i) =>
+      `<button type="button" class="bed-tab ${i === bed ? 'on' : ''}" data-i="${i}">${name}</button>`
+    ).join('');
+    tabs.onclick = (e) => {
+      const t = e.target.closest('[data-i]');
+      if (!t) return;
+      bed = Number(t.dataset.i);
+      pickStart = pickEnd = null;
+      tabs.querySelectorAll('.bed-tab').forEach((x) => x.classList.toggle('on', Number(x.dataset.i) === bed));
+      render();
+    };
+
+    function inPick(i) {
+      if (pickStart == null) return false;
+      if (pickEnd == null) return i === pickStart;
+      return i >= Math.min(pickStart, pickEnd) && i <= Math.max(pickStart, pickEnd);
+    }
+
+    function render() {
+      document.getElementById('bedTitle').textContent = BEDS[bed];
+      const grid = document.getElementById('grid');
+      const row = STATE[bed] || {};
+      grid.innerHTML = '';
+      for (let i = 0; i < n; i++) {
+        const s = document.createElement('button');
+        s.type = 'button';
+        s.className = 'slot';
+        s.title = slotLabel(i);
+        const v = row[i];
+        if (v === 1) s.classList.add('booked');
+        if (v === 2) s.classList.add('closed');
+        if (v === 3) s.classList.add('request');
+        if (inPick(i)) s.classList.add(i === pickStart || i === pickEnd ? 'pick' : 'mid');
+        s.onclick = () => {
+          if (v === 1) return toast('已有预约');
+          if (pickStart == null || pickEnd != null) {
+            pickStart = i;
+            pickEnd = null;
+          } else pickEnd = i;
+          render();
+        };
+        grid.appendChild(s);
+      }
+
+      const rec = [];
+      Object.keys(row).forEach((k) => {
+        const v = row[k];
+        if (v === 2) rec.push(`关闭 · ${slotLabel(Number(k))}`);
+        if (v === 3) rec.push(`开床申请 · ${slotLabel(Number(k))}`);
+        if (v === 1) rec.push(`预约 · ${slotLabel(Number(k))}`);
+      });
+      document.getElementById('records').innerHTML = rec.length
+        ? rec.map((t) => `<div class="list-item"><div class="t">${t}</div></div>`).join('')
+        : '<p class="hint">此床当日暂无记录</p>';
+    }
+
+    document.getElementById('btnDay').onclick = () => toast(`演示：整日关闭 ${BEDS[bed]}`);
+    document.getElementById('btnClose').onclick = () => {
+      if (pickStart == null) return toast('请先点选');
+      toast(`演示：关闭 ${BEDS[bed]} 选区`);
+    };
+    render();
+  </script>
+</body>
+</html>

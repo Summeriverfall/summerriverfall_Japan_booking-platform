@@ -111,11 +111,52 @@
     return data;
   }
 
+  /** 整日重写：清空当日后再写入 */
+  async function rewriteCalendarDay(payload) {
+    if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
+    const res = await fetch(`${baseUrl()}/calendar/rewrite-day`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(payload),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || `日历重写失败 HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  async function registerDailyDigest(payload) {
+    if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
+    const res = await fetch(`${baseUrl()}/digest/register`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(payload),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || `每日汇总登记失败 HTTP ${res.status}`);
+    }
+    return data;
+  }
+
   global.EmailClient = {
     health,
     sendMerchantMail,
     upsertCalendarEvent,
     deleteCalendarEvent,
     cleanupCalendarDay,
+    rewriteCalendarDay,
+    registerDailyDigest,
   };
 })(window);

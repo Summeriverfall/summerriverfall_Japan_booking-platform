@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>方案 A · 表单关床</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <div class="phone-shell">
+    <header class="demo-top">
+      <div class="scheme">方案 A</div>
+      <h1>Starry Flow · 关床</h1>
+      <div class="sub">表单为主 · 无拖拽时间轴</div>
+      <nav class="demo-nav" id="nav"></nav>
+    </header>
+    <div class="pad">
+      <div class="card">
+        <h2>关闭床位</h2>
+        <p class="hint">适合手机：大按钮选择，两步确认。</p>
+        <div class="field">
+          <label>床位</label>
+          <div class="chip-row" id="beds"></div>
+        </div>
+        <div class="field">
+          <label>快捷时段</label>
+          <div class="chip-row" id="presets">
+            <button type="button" class="chip on" data-p="day">整天</button>
+            <button type="button" class="chip" data-p="1h">1 小时</button>
+            <button type="button" class="chip" data-p="2h">2 小时</button>
+            <button type="button" class="chip" data-p="custom">自定义</button>
+          </div>
+        </div>
+        <div id="customTimes" hidden>
+          <div class="field"><label>开始</label><input type="time" id="start" value="18:00"></div>
+          <div class="field"><label>结束</label><input type="time" id="end" value="19:00"></div>
+        </div>
+        <div class="field"><label>原因</label><input id="reason" placeholder="散客 / 维护" value="商家手动关闭"></div>
+        <button type="button" class="btn primary block" id="btnClose">确认关闭</button>
+      </div>
+
+      <div class="card">
+        <h2>待处理 · 开床申请</h2>
+        <div class="list-item">
+          <div class="t">4号床 · 16:00–17:00</div>
+          <div class="m">客服申请开床 · 备注：客人指定</div>
+          <div class="actions">
+            <button type="button" class="btn primary" data-act="ok">同意</button>
+            <button type="button" class="btn danger" data-act="no">拒绝</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>当日关闭</h2>
+        <div class="list-item">
+          <div class="t">2号床 · 18:00–18:30</div>
+          <div class="m">商家手动关闭</div>
+          <div class="actions">
+            <button type="button" class="btn" data-act="edit">改时段</button>
+            <button type="button" class="btn danger" data-act="open">打开</button>
+          </div>
+        </div>
+        <p class="hint">占用一览（只读摘要）</p>
+        <p class="hint" style="margin-top:6px"><span class="lg b"></span>2号 14:00 已约 · <span class="lg g"></span>2号 18:00 已关 · <span class="lg t"></span>4号 申请中</p>
+      </div>
+    </div>
+  </div>
+  <script src="demo-common.js"></script>
+  <script>
+    const { BEDS, toast, navHtml } = MobileDemo;
+    document.getElementById('nav').innerHTML = navHtml('a-form.html');
+    let bed = 1;
+    let preset = 'day';
+    const bedsEl = document.getElementById('beds');
+    bedsEl.innerHTML = BEDS.map((n, i) =>
+      `<button type="button" class="chip ${i === bed ? 'on' : ''}" data-i="${i}">${n}</button>`
+    ).join('');
+    bedsEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-i]');
+      if (!b) return;
+      bed = Number(b.dataset.i);
+      bedsEl.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', Number(c.dataset.i) === bed));
+    });
+    document.getElementById('presets').addEventListener('click', (e) => {
+      const c = e.target.closest('[data-p]');
+      if (!c) return;
+      preset = c.dataset.p;
+      document.querySelectorAll('#presets .chip').forEach((x) => x.classList.toggle('on', x === c));
+      document.getElementById('customTimes').hidden = preset !== 'custom';
+    });
+    document.getElementById('btnClose').onclick = () => {
+      toast(`演示：已关闭 ${BEDS[bed]}（${preset === 'day' ? '整天' : preset}）`);
+    };
+    document.querySelectorAll('[data-act]').forEach((btn) => {
+      btn.onclick = () => toast('演示：' + btn.textContent);
+    });
+  </script>
+</body>
+</html>

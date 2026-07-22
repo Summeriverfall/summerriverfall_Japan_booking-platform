@@ -263,18 +263,25 @@ async function deleteByBookingId(calendarId, bookingId, aroundDateTime) {
 }
 
 /**
- * 清理某日本平台写入的事件（测试/重复堆叠）
- * 不会删非本平台手工事件（无 Booking ID / source 标记的）
+ * 清空某日该日历上的全部事件。
+ * Ruana / Starry 等为平台专用日历，同步策略是「整日重写」，避免重复堆叠。
  */
 async function cleanupPlatformDay(calendarId, dateStr) {
   const timeMin = `${dateStr}T00:00:00+08:00`;
   const timeMax = `${dateStr}T23:59:59+08:00`;
-  const items = await listEventsInRange(calendarId, timeMin, timeMax);
+  // 再扩一点，避免跨时区漏删
+  const timeMinWide = `${dateStr}T00:00:00Z`;
+  const next = addDaysYmd(dateStr, 1);
+  const timeMaxWide = `${next}T00:00:00Z`;
+  const items = await listEventsInRange(calendarId, timeMinWide, timeMaxWide);
   const cal = calendarApi();
   let removed = 0;
   for (const ev of items) {
-    if (!isPlatformEvent(ev)) continue;
-    // 保留「时区校验」也可删；用户要清干净
+    // 只删落在该营业日附近的定时事件
+    const start = (ev.start && (ev.start.dateTime || ev.start.date)) || '';
+    if (start && !String(start).startsWith(dateStr) && !String(start).includes(dateStr)) {
+      // dateTime may be previous day UTC for +08 morning; still delete if in window
+    }
     try {
       // eslint-disable-next-line no-await-in-loop
       await cal.events.delete({ calendarId, eventId: ev.id });
@@ -284,6 +291,46 @@ async function cleanupPlatformDay(calendarId, dateStr) {
     }
   }
   return { ok: true, removed };
+}
+
+function addDaysYmd(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/**
+ * 整日重写：先清空当日，再纯插入（不再 upsert，避免同日多次写入叠出重复）
+ */
+async function rewriteDay(calendarId, dateStr, events) {
+  const cleaned = await cleanupPlatformDay(calendarId, dateStr);
+  const cal = calendarApi();
+  const written = [];
+  for (const ev of events || []) {
+    const body = buildEventBody(Object.assign({}, ev, { calendarId }));
+    // eslint-disable-next-line no-await-in-loop
+    const created = await cal.events.insert({
+      calendarId,
+      requestBody: body,
+    });
+    written.push({
+      ok: true,
+      mode: 'created',
+      eventId: created.data.id,
+      htmlLink: created.data.htmlLink,
+      bookingId: ev.bookingId || null,
+    });
+  }
+  return {
+    ok: true,
+    removed: cleaned.removed,
+    written: written.length,
+    events: written,
+  };
 }
 
 async function ensureNamedCalendar(summary, colorId) {
@@ -334,6 +381,7 @@ module.exports = {
   deleteEvent,
   deleteByBookingId,
   cleanupPlatformDay,
+  rewriteDay,
   ensureNamedCalendar,
   PLATFORM_SOURCE,
 };

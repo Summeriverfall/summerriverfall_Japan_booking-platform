@@ -3,10 +3,11 @@
  */
 (function (global) {
   const TYPE_COLOR = {
-    booking: '#2f6fed',
+    booking: '#9bb8d9',
     pending: '#d97706',
     hold: '#7c3aed',
     closure: '#6b7280',
+    closure_request: '#0f766e',
   };
 
   function hourLabels() {
@@ -213,6 +214,14 @@
       const label = document.createElement('div');
       label.className = 'board-label';
       label.textContent = cfg.bedLabels[bed] || `${bed + 1}号床`;
+      if (opts.onBedLabelClick) {
+        label.classList.add('is-clickable');
+        label.title = '点击可整日关床';
+        label.addEventListener('click', (e) => {
+          e.stopPropagation();
+          opts.onBedLabelClick(bed, { clientX: e.clientX, clientY: e.clientY });
+        });
+      }
       const track = document.createElement('div');
       track.className = 'board-track';
       track.dataset.bed = String(bed);
@@ -262,17 +271,30 @@
           block.className = `board-block type-${x.type}`;
           block.style.left = `${(x.start / span) * 100}%`;
           block.style.width = `${((x.end - x.start) / span) * 100}%`;
-          const title =
-            x.type === 'closure'
-              ? `关闭 ${x.startTime}-${x.endTime}`
-              : x.type === 'hold'
-                ? `预占 ${x.startTime}-${x.endTime}`
-                : `${x.ref.guestName || '预约'} ${x.startTime} · ${x.ref.guests || 1}人`;
+          const isClosure =
+            x.type === 'closure' || x.type === 'closure_request';
+          const guestLabel = (() => {
+            const n = String((x.ref && x.ref.guestName) || '').trim();
+            if (!n || n === '预占') return '';
+            return n;
+          })();
+          const title = isClosure
+            ? x.type === 'closure_request'
+              ? `开床申请中 ${x.startTime}-${x.endTime}`
+              : `关闭 ${x.startTime}-${x.endTime}`
+            : x.type === 'hold'
+              ? `预占 ${x.startTime}-${x.endTime}`
+              : `${guestLabel || '预约'} ${x.startTime} · ${x.ref.guests || 1}人`;
           block.title = title;
           const labelEl = document.createElement('span');
           labelEl.className = 'board-block-label';
-          labelEl.textContent =
-            x.type === 'closure' ? '关' : x.type === 'hold' ? '占' : x.ref.guestName || '约';
+          labelEl.textContent = isClosure
+            ? x.type === 'closure_request'
+              ? '申'
+              : '关'
+            : x.type === 'hold'
+              ? '占'
+              : guestLabel || '约';
           block.appendChild(labelEl);
 
           if (x.type !== 'closure' && x.ref && x.ref.id) {
@@ -327,29 +349,32 @@
             });
           }
 
-          if (x.type === 'closure' && x.ref && x.ref.id) {
+          if (isClosure && x.ref && x.ref.id) {
             block.dataset.closureId = x.ref.id;
             const bedsSorted = (x.ref.beds || [bed]).slice().sort((a, c) => a - c);
             const selected = opts.selectedClosureId === x.ref.id;
+            const canEditClosure = Boolean(opts.onClosureLayoutChange);
             if (selected) {
               block.classList.add('is-selected');
-              [['w', '左'], ['e', '右']].forEach(([h]) => {
-                const hd = document.createElement('i');
-                hd.className = `blk-handle blk-handle-${h}`;
-                hd.dataset.handle = h;
-                block.appendChild(hd);
-              });
-              if (bed === bedsSorted[0]) {
-                const hd = document.createElement('i');
-                hd.className = 'blk-handle blk-handle-n';
-                hd.dataset.handle = 'n';
-                block.appendChild(hd);
-              }
-              if (bed === bedsSorted[bedsSorted.length - 1]) {
-                const hd = document.createElement('i');
-                hd.className = 'blk-handle blk-handle-s';
-                hd.dataset.handle = 's';
-                block.appendChild(hd);
+              if (canEditClosure) {
+                [['w', '左'], ['e', '右']].forEach(([h]) => {
+                  const hd = document.createElement('i');
+                  hd.className = `blk-handle blk-handle-${h}`;
+                  hd.dataset.handle = h;
+                  block.appendChild(hd);
+                });
+                if (bed === bedsSorted[0]) {
+                  const hd = document.createElement('i');
+                  hd.className = 'blk-handle blk-handle-n';
+                  hd.dataset.handle = 'n';
+                  block.appendChild(hd);
+                }
+                if (bed === bedsSorted[bedsSorted.length - 1]) {
+                  const hd = document.createElement('i');
+                  hd.className = 'blk-handle blk-handle-s';
+                  hd.dataset.handle = 's';
+                  block.appendChild(hd);
+                }
               }
             }
 
@@ -362,7 +387,7 @@
                 return;
               }
               const handle = e.target.closest('.blk-handle');
-              if (opts.selectedClosureId !== x.ref.id) {
+              if (opts.selectedClosureId !== x.ref.id || !canEditClosure) {
                 if (opts.onClosureSelect) {
                   opts.onClosureSelect(x.ref, { clientX: e.clientX, clientY: e.clientY });
                 }
@@ -382,7 +407,7 @@
                 'closure'
               );
             });
-          } else if (opts.onBlockClick && x.type === 'closure') {
+          } else if (opts.onBlockClick && isClosure) {
             block.addEventListener('click', (e) => {
               e.stopPropagation();
               opts.onBlockClick(x);
@@ -635,10 +660,11 @@
     // legend
     const ly = height - 22;
     const legs = [
-      ['#2f6fed', '已确认'],
+      ['#9bb8d9', '已确认'],
       ['#d97706', '待确认'],
       ['#7c3aed', '预占'],
       ['#6b7280', '商家关闭'],
+      ['#0f766e', '开床申请'],
       ['#1E8E4F', '本单高亮'],
     ];
     let lx = 20;
@@ -648,7 +674,7 @@
       ctx.fillStyle = '#444';
       ctx.font = '12px sans-serif';
       ctx.fillText(t, lx + 16, ly + 2);
-      lx += 78;
+      lx += 72;
     });
 
     return canvas.toDataURL('image/png');
@@ -691,10 +717,82 @@
       '',
       '附件/配图：床位使用时段实时状态图（见预览区图片）',
       '',
-      '— 御足苑预约管理平台（功能测试版）',
+      '— 预约管理平台（功能测试版）',
     ].join('\n');
 
     return { subject, body, chartDataUrl: buildStatusChartImage(booking.date, booking.id) };
+  }
+
+  function buildOpenRequestEmail(closure) {
+    const cfg = STORE_CONFIG;
+    const beds = (closure.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+    const subject = `${cfg.emailSubjectPrefix}开床申请 ${closure.date} ${beds || ''}`;
+    const body = [
+      '【开床申请】',
+      '',
+      `门店：${cfg.storeName.cn}`,
+      `营业日：${closure.date}`,
+      `关闭时段：${closure.startTime} – ${closure.endTime}`,
+      `床位：${beds || '-'}`,
+      `原关闭原因：${closure.reason || '-'}`,
+      `申请备注：${closure.openRequestNote || '-'}`,
+      '',
+      '客服申请打开上述关闭床位，请在商家端查看并选择「同意开床」或「拒绝」。',
+      '附件/配图：床位使用时段实时状态图（见预览区图片）',
+      '',
+      '— 预约管理平台（功能测试版）',
+    ].join('\n');
+    return {
+      subject,
+      body,
+      chartDataUrl: buildStatusChartImage(closure.date, null),
+    };
+  }
+
+  function buildDailyDigestEmail(dateStr) {
+    const cfg = STORE_CONFIG;
+    const bookings = BookingStore.listBookings(dateStr).filter(
+      (b) => b.status !== 'cancelled'
+    );
+    const closures = BookingStore.listClosures(dateStr);
+    const lines = bookings.map((b) => {
+      const end = BookingStore.offsetToTime(
+        BookingStore.timeToOffset(b.startTime) + b.durationMinutes
+      );
+      const beds = (b.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+      const course = (cfg.courses.find((c) => c.id === b.courseId) || {}).name || '-';
+      return `· [${b.status}] ${b.startTime}–${end} ${beds} ${b.guests || 1}人 ${
+        b.guestName || '未留名'
+      } / ${course}`;
+    });
+    const closeLines = closures.map((c) => {
+      const beds = (c.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+      const tag = c.openRequestStatus === 'requested' ? '（开床申请中）' : '';
+      return `· ${c.startTime}–${c.endTime} ${beds || '-'} ${c.reason || ''}${tag}`;
+    });
+    const subject = `${cfg.emailSubjectPrefix}每日预约汇总 ${dateStr}`;
+    const body = [
+      '【每日预约汇总】',
+      '',
+      `门店：${cfg.storeName.cn}`,
+      `营业日：${dateStr}`,
+      `营业时段：${cfg.hoursLabel}`,
+      '',
+      `预约（${bookings.length}）：`,
+      ...(lines.length ? lines : ['（当日无预约）']),
+      '',
+      `商家关闭（${closures.length}）：`,
+      ...(closeLines.length ? closeLines : ['（当日无关闭）']),
+      '',
+      '附件/配图：床位使用时段实时状态图（见预览区图片）',
+      '',
+      '— 预约管理平台（功能测试版）',
+    ].join('\n');
+    return {
+      subject,
+      body,
+      chartDataUrl: buildStatusChartImage(dateStr, null),
+    };
   }
 
   function addDaysYmd(dateStr, days) {
@@ -774,6 +872,8 @@
     renderBoard,
     buildStatusChartImage,
     buildEmailDraft,
+    buildOpenRequestEmail,
+    buildDailyDigestEmail,
     buildCalendarDraft,
     hourLabels,
     hourSlots,

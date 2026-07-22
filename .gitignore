@@ -8,3 +8,6 @@ Thumbs.db
 .env.*
 !.env.example
 server/node_modules/
+server/data/
+server/client_secret_*.json
+*.apps.googleusercontent.com.json
