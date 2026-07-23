@@ -55,6 +55,13 @@
       storageKey: 'booking-platform-runana-v1',
       /** 商家端识别码（测试用，非正式） */
       accessCode: 'RUANA88',
+      technicians: [
+        { id: 'ruana-a', code: 'R1', name: { jp: '佐藤', en: 'Sato', cn: '佐藤' } },
+        { id: 'ruana-b', code: 'R2', name: { jp: '鈴木', en: 'Suzuki', cn: '铃木' } },
+        { id: 'ruana-c', code: 'R3', name: { jp: '高橋', en: 'Takahashi', cn: '高桥' } },
+        { id: 'ruana-d', code: 'R4', name: { jp: '伊藤', en: 'Ito', cn: '伊藤' } },
+      ],
+      techWorkKey: 'tech-work-runana-v1',
     },
     {
       storeId: 'starryflow',
@@ -110,6 +117,13 @@
       googleWriteTimeZone: 'Asia/Shanghai',
       storageKey: 'booking-platform-starryflow-v1',
       accessCode: 'STARRY88',
+      technicians: [
+        { id: 'starry-a', code: 'S1', name: { jp: '山本', en: 'Yamamoto', cn: '山本' } },
+        { id: 'starry-b', code: 'S2', name: { jp: '中村', en: 'Nakamura', cn: '中村' } },
+        { id: 'starry-c', code: 'S3', name: { jp: '小林', en: 'Kobayashi', cn: '小林' } },
+        { id: 'starry-d', code: 'S4', name: { jp: '加藤', en: 'Kato', cn: '加藤' } },
+      ],
+      techWorkKey: 'tech-work-starryflow-v1',
     },
     {
       storeId: 'luna',
@@ -168,11 +182,19 @@
       accessCode: 'LUNA88',
       /** 官网（测试托管路径） */
       sitePath: '../shops/luna/landing.html',
+      technicians: [
+        { id: 'luna-a', code: 'L1', name: { jp: '美咲', en: 'Misaki', cn: '美咲' } },
+        { id: 'luna-b', code: 'L2', name: { jp: '結衣', en: 'Yui', cn: '结衣' } },
+        { id: 'luna-c', code: 'L3', name: { jp: '陽菜', en: 'Hina', cn: '阳菜' } },
+        { id: 'luna-d', code: 'L4', name: { jp: '咲良', en: 'Sakura', cn: '咲良' } },
+      ],
+      techWorkKey: 'tech-work-luna-v1',
     },
   ];
 
   const SESSION_STORE = 'booking_platform_store';
   const SESSION_ROLE = 'booking_platform_role';
+  const SESSION_TECH = 'booking_platform_tech';
   const RESOURCE_OVERRIDE_KEY = 'booking_platform_resource_overrides_v1';
 
   function readResourceOverrides() {
@@ -305,10 +327,42 @@
     }
   }
 
+  function setTechnician(techId) {
+    try {
+      if (techId) sessionStorage.setItem(SESSION_TECH, techId);
+      else sessionStorage.removeItem(SESSION_TECH);
+    } catch (e) {}
+  }
+
+  function getTechnicianId() {
+    try {
+      return sessionStorage.getItem(SESSION_TECH) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getTechnician() {
+    const store = getStore(resolveStoreIdFromPage());
+    if (!store) return null;
+    const id = getTechnicianId();
+    return (store.technicians || []).find((t) => t.id === id) || null;
+  }
+
+  function findTechnicianByCode(storeId, code) {
+    const store = getStore(storeId);
+    if (!store) return null;
+    const c = String(code || '')
+      .trim()
+      .toUpperCase();
+    return (store.technicians || []).find((t) => String(t.code).toUpperCase() === c) || null;
+  }
+
   function clearSession() {
     try {
       sessionStorage.removeItem(SESSION_STORE);
       sessionStorage.removeItem(SESSION_ROLE);
+      sessionStorage.removeItem(SESSION_TECH);
     } catch (e) {}
   }
 
@@ -325,5 +379,9 @@
     getResourceOverride,
     setResourceOverride,
     clearResourceOverride,
+    setTechnician,
+    getTechnicianId,
+    getTechnician,
+    findTechnicianByCode,
   };
 })(window);

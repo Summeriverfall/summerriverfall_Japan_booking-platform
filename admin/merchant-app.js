@@ -12,9 +12,6 @@
   const REASON_PRESETS = ['临时关闭', '线下客户占用', '设备维护', '店员休息', '其他'];
 
   const cfg = STORE_CONFIG;
-  document.title = `商家端 · ${cfg.storeName.cn}`;
-  document.getElementById('pageBrand').innerHTML =
-    `商家端 · ${cfg.storeName.cn}<div class="hint" style="margin:0">${cfg.tagline} · ${cfg.hoursLabel} · ${cfg.bedCount} 资源</div>`;
   const mid = String(
     Math.min(cfg.openHour + 3, cfg.overnight ? 20 : Math.max(cfg.openHour + 1, cfg.closeHour - 2))
   ).padStart(2, '0');
@@ -22,6 +19,21 @@
   document.getElementById('endTime').value = `${String(Number(mid) + 1).padStart(2, '0')}:00`;
   document.getElementById('startTime').step = '1800';
   document.getElementById('endTime').step = '1800';
+
+  function updateChrome() {
+    const name = DeskI18n.storeName(cfg);
+    document.title = `${DeskI18n.t('merchantBrand')} · ${name}`;
+    document.getElementById('pageBrand').innerHTML =
+      `${DeskI18n.t('merchantBrand')} · ${name}<div class="hint" style="margin:0" id="pageSub">${cfg.tagline} · ${cfg.hoursLabel} · ${cfg.bedCount} ${DeskI18n.t('resourcesUnit')}</div>`;
+  }
+  DeskI18n.mountSwitch(document.querySelector('.topbar-right'));
+  DeskI18n.applyDom();
+  updateChrome();
+  DeskI18n.onChange(() => {
+    DeskI18n.applyDom();
+    updateChrome();
+    refresh();
+  });
 
   function snapTimeInput(el) {
     if (!el || !el.value) return;
@@ -318,16 +330,17 @@
       return;
     }
     if (selectedClosureId) {
-      btnClose.textContent = '保存调整';
+      btnClose.textContent = DeskI18n.t('btnSaveAdjust');
       btnRelease.hidden = hasRequest;
       btnClose.hidden = hasRequest;
       if (!hasRequest) {
-        const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
-        btnRelease.textContent = `打开（释放此${kind}）`;
+        const isDay = BookingStore.isDayScopeClosure(c);
+        btnRelease.textContent = DeskI18n.t(isDay ? 'btnReleaseDay' : 'btnReleaseSlot');
       }
     } else {
       btnClose.hidden = false;
-      btnClose.textContent = sheetMode === 'day' ? '确认整日关闭' : '确认关闭';
+      btnClose.textContent =
+        sheetMode === 'day' ? DeskI18n.t('btnConfirmDayClose') : DeskI18n.t('btnConfirmClose');
       btnRelease.hidden = true;
     }
   }
@@ -367,19 +380,23 @@
       formErr.textContent = `「${name}」已整日关闭，不能重复关闭。请先点「开」释放。`;
       return;
     }
-    if (!confirm(`将「${name}」整天关闭（营业时段 ${STORE_CONFIG.hoursLabel}）？`)) return;
     const startTime = BookingStore.offsetToTime(0);
     const endTime = BookingStore.offsetToTime(BookingStore.businessSpanMinutes());
-    if (!confirmIfBookingConflict(currentDate(), startTime, endTime, [bedIndex])) return;
-    const reason = syncReasonFromUi();
-    const r = BookingStore.setClosure({
-      date: currentDate(),
+    const slotOverlaps = BookingStore.findOverlappingClosures(
+      currentDate(),
       startTime,
       endTime,
-      beds: [bedIndex],
+      [bedIndex]
+    ).filter((c) => !BookingStore.isDayScopeClosure(c));
+    const tip = slotOverlaps.length
+      ? `将「${name}」整天关闭（营业时段 ${STORE_CONFIG.hoursLabel}）？\n该资源上已有 ${slotOverlaps.length} 条时段关闭，将被整日关覆盖。`
+      : `将「${name}」整天关闭（营业时段 ${STORE_CONFIG.hoursLabel}）？`;
+    if (!confirm(tip)) return;
+    if (!confirmIfBookingConflict(currentDate(), startTime, endTime, [bedIndex])) return;
+    const reason = syncReasonFromUi();
+    const r = BookingStore.closeDayBed(currentDate(), bedIndex, {
       reason: reason.reason || '临时关闭',
       reasonCode: reason.reasonCode,
-      scope: 'day',
     });
     if (!r.ok) {
       formErr.className = 'err';
@@ -390,7 +407,9 @@
     rangeSelection = null;
     mobilePickStart = null;
     formErr.className = 'hint ok';
-    formErr.textContent = `已整日关闭 ${name}。点左侧「开」可单独释放整日关。`;
+    formErr.textContent = slotOverlaps.length
+      ? `已整日关闭 ${name}（已覆盖原时段关闭）。点「开」可释放整日关。`
+      : `已整日关闭 ${name}。点左侧「开」可单独释放整日关。`;
     closeSide();
     refresh();
   }
@@ -781,12 +800,11 @@
         const startOff = slot * snap;
         const cell = map[bed][slot];
 
-        // 再点同一已选资源空档 → 取消选择
+        // 再点当前选区内空档 → 取消选择
         if (
           !cell &&
           rangeSelection &&
-          (rangeSelection.bedIndexes || []).length === 1 &&
-          rangeSelection.bedIndexes[0] === bed &&
+          (rangeSelection.bedIndexes || []).includes(bed) &&
           startOff >= rangeSelection.startOffset &&
           startOff < rangeSelection.endOffset
         ) {
@@ -827,6 +845,20 @@
             x: window.innerWidth / 2,
             y: window.innerHeight - 80,
           });
+          refresh();
+          return;
+        }
+
+        // 已有选区时点其它空档 → 直接切换到新格（不先关掉）
+        if (!cell && rangeSelection) {
+          mobilePickStart = { bed, slot };
+          const endOff = Math.min(startOff + snap, BookingStore.businessSpanMinutes());
+          openRangeSheet(bed, startOff, endOff, '已切换选区；可再点同格取消');
+          if (mTimelineHint) {
+            mTimelineHint.textContent = `已选 ${STORE_CONFIG.bedLabels[bed]} ${BookingStore.offsetToTime(
+              startOff
+            )} 起；再点当前选区取消`;
+          }
           refresh();
           return;
         }
@@ -877,7 +909,8 @@
         selection: rangeSelection,
         selectedClosureId,
         selectedBookingId,
-        selectionHint: '左侧关/开=整日；空档拖选=时段关；再点同资源取消选择',
+        selectionHint: '左侧关/开=整日；空档拖选=时段关；再点当前选区取消，点其它格切换',
+        showLegend: false,
         bedDayControls: true,
         isBedDayClosed: (bedIndex) => BookingStore.hasDayClosureForBed(date, bedIndex),
         onDayClose: (bedIndex) => closeDayBed(bedIndex),
@@ -997,7 +1030,7 @@
           formErr.className = conflicts.length ? 'hint warn' : 'hint ok';
           formErr.textContent = conflicts.length
             ? `已选 ${names} · ${range.startTime}–${range.endTime}（与预约重叠）`
-            : `已选 ${names} · ${range.startTime}–${range.endTime}，请确认关闭。再点同资源可取消。`;
+            : `已选 ${names} · ${range.startTime}–${range.endTime}，请确认关闭。再点当前选区可取消。`;
           remainHint.textContent = `选区：${names} · ${range.startTime}–${range.endTime}`;
           if (sideTitle) sideTitle.textContent = '关时段';
           openSide(
@@ -1116,6 +1149,7 @@
       reason: reason.reason,
       reasonCode: reason.reasonCode,
       scope,
+      absorbOverlaps: scope === 'day',
     });
     if (!r.ok) {
       sideErr.textContent = r.error;

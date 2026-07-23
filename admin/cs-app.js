@@ -3,10 +3,21 @@
   StoreRegistry.setRole('admin');
 
   const cfg = STORE_CONFIG;
-  document.title = `客服端 · ${cfg.storeName.cn}`;
-  document.getElementById('pageBrand').innerHTML =
-    `客服端 · ${cfg.storeName.cn}<div class="hint" style="margin:0">${cfg.tagline} · ${cfg.hoursLabel} · ${cfg.bedCount} 床</div>`;
+  function updateChrome() {
+    const name = DeskI18n.storeName(cfg);
+    document.title = `${DeskI18n.t('csBrand')} · ${name}`;
+    document.getElementById('pageBrand').innerHTML =
+      `${DeskI18n.t('csBrand')} · ${name}<div class="hint" style="margin:0" id="pageSub">${cfg.tagline} · ${cfg.hoursLabel} · ${cfg.bedCount} ${DeskI18n.t('bedsUnit')}</div>`;
+  }
+  DeskI18n.mountSwitch(document.querySelector('.topbar-right'));
+  DeskI18n.applyDom();
+  updateChrome();
   document.getElementById('navCs').href = `cs.html?store=${encodeURIComponent(cfg.storeId)}`;
+  DeskI18n.onChange(() => {
+    DeskI18n.applyDom();
+    updateChrome();
+    refresh();
+  });
 
   const defaultHour = String(
     Math.min(cfg.openHour + 2, cfg.overnight ? 22 : cfg.closeHour - 1)
@@ -167,7 +178,8 @@
     if (sideBodyBooking) sideBodyBooking.hidden = sideMode !== 'booking';
     if (sideBodyOpenReq) sideBodyOpenReq.hidden = sideMode !== 'openRequest';
     if (sideTitle) {
-      sideTitle.textContent = sideMode === 'openRequest' ? '开床申请' : '预约编辑';
+      sideTitle.textContent =
+        sideMode === 'openRequest' ? DeskI18n.t('sideOpenReq') : DeskI18n.t('sideBookingEdit');
     }
   }
 
@@ -194,7 +206,9 @@
           BookingStore.listClosures(currentDate()).find((x) => x.id === selectedClosureId) ||
           {};
         requestOpenBtn.textContent =
-          c.openRequestStatus === 'requested' ? '重拟开床申请邮件' : '申请开床并拟邮件';
+          c.openRequestStatus === 'requested'
+            ? DeskI18n.t('btnRequestOpenAgain')
+            : DeskI18n.t('btnRequestOpen');
       }
       requestAnimationFrame(() => placeCtxMenu());
       return;
@@ -209,14 +223,18 @@
     if (createBtn) {
       // 预占只显示「转为预约 / 释放」，不提供保存修改；转成预约后再改
       createBtn.hidden = isHold;
-      createBtn.textContent = selectedBookingId ? '保存修改' : '创建预约';
+      createBtn.textContent = selectedBookingId
+        ? DeskI18n.t('btnSaveBooking')
+        : DeskI18n.t('btnCreate');
     }
     if (holdBtn) holdBtn.hidden = Boolean(selectedBookingId);
     if (convertBtn) convertBtn.hidden = !isHold;
     if (requestOpenBtn) requestOpenBtn.hidden = true;
     if (deleteBtn) {
       deleteBtn.hidden = !selectedBookingId;
-      deleteBtn.textContent = isHold ? '释放预占' : '删除预约';
+      deleteBtn.textContent = isHold
+        ? DeskI18n.t('btnReleaseHold')
+        : DeskI18n.t('btnDeleteBooking');
     }
     requestAnimationFrame(() => placeCtxMenu());
   }

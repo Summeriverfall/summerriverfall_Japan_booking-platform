@@ -50,21 +50,23 @@
   <div class="portal-bg" aria-hidden="true"></div>
   <main class="portal-shell">
     <header class="portal-hero portal-hero-sm">
-      <a class="back-link" href="index.html">← 返回平台入口</a>
+      <div class="portal-top-actions" id="portalLangMount"></div>
+      <a class="back-link" href="index.html" data-i18n="backHub">← 入口へ戻る</a>
       <p class="eyebrow">Admin</p>
-      <h1>选择门店</h1>
-      <p class="lede">进入后即为该店客服端。各店数据相互隔离。可进入编辑模式修改资源名与数量（保存在本机浏览器）。</p>
+      <h1 data-i18n="adminPortalTitle">店舗を選択</h1>
+      <p class="lede" data-i18n="adminLede">进入后即为该店客服端…</p>
     </header>
 
     <div class="portal-tools">
-      <button type="button" class="btn" id="btnEditResources">编辑资源与项目</button>
-      <span class="lede" id="editHint" style="margin:0;font-size:.85rem">平时点击卡片进入客服端</span>
+      <button type="button" class="btn" id="btnEditResources" data-i18n="editResources">リソースとコースを編集</button>
+      <span class="lede" id="editHint" style="margin:0;font-size:.85rem" data-i18n="editHintNormal">平时点击卡片进入客服端</span>
     </div>
 
     <div class="store-grid" id="storeGrid"></div>
   </main>
 
-  <script src="stores.js?v=20260722-p0"></script>
+  <script src="stores.js"></script>
+  <script src="desk-i18n.js"></script>
   <script>
     StoreRegistry.setRole('admin');
     const grid = document.getElementById('storeGrid');
@@ -72,12 +74,27 @@
     const editHint = document.getElementById('editHint');
     let editing = false;
 
+    DeskI18n.mountSwitch(document.getElementById('portalLangMount'));
+    DeskI18n.onChange(() => {
+      DeskI18n.applyDom();
+      document.title = DeskI18n.t('adminPortalTitle');
+      btnEdit.textContent = editing ? DeskI18n.t('doneEdit') : DeskI18n.t('editResources');
+      editHint.textContent = editing ? DeskI18n.t('editHintOn') : DeskI18n.t('editHintNormal');
+      render();
+    });
+    document.title = DeskI18n.t('adminPortalTitle');
+    DeskI18n.applyDom();
+
     function escapeHtml(s) {
       return String(s || '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+
+    function storeDisplayName(s) {
+      return DeskI18n.storeName(s);
     }
 
     function render() {
@@ -91,32 +108,32 @@
           <div class="store-card ${editing ? 'is-editing' : ''}" data-store="${escapeHtml(s.storeId)}" style="--accent:${s.accent}">
             <a class="store-card-link" href="cs.html?store=${encodeURIComponent(s.storeId)}" ${editing ? 'onclick="return false"' : ''} style="text-decoration:none;color:inherit;display:block">
               <div class="store-card-top">
-                <span class="store-badge">客服看板</span>
+                <span class="store-badge">${escapeHtml(DeskI18n.t('csBoard'))}</span>
                 <span class="store-hours">${escapeHtml(s.hoursLabel)}</span>
               </div>
-              <h2>${escapeHtml(s.storeName.cn)}</h2>
+              <h2>${escapeHtml(storeDisplayName(s))}</h2>
               <p class="store-tag">${escapeHtml(s.tagline)}</p>
               <p class="store-addr">${escapeHtml(s.address)}</p>
               <div class="store-meta">
-                <span>${s.bedCount} 资源</span>
-                <span>${s.overnight ? '跨夜营业' : '当日营业'}</span>
+                <span>${s.bedCount} ${escapeHtml(DeskI18n.t('resourcesUnit'))}</span>
+                <span>${escapeHtml(s.hoursLabel)}</span>
               </div>
-              <span class="entry-go">进入客服端 →</span>
+              <span class="entry-go">${escapeHtml(DeskI18n.t('enterStore'))}</span>
             </a>
             <div class="res-edit">
-              <label>资源数量</label>
+              <label>${escapeHtml(DeskI18n.t('resCount'))}</label>
               <input type="number" min="1" max="20" data-count value="${s.bedCount}">
-              <label>资源名称（房间 / VIP / 双人房 / 床位等）</label>
+              <label>${escapeHtml(DeskI18n.t('resNames'))}</label>
               <div class="res-labels" data-labels>${labels}</div>
-              <label>预约项目（每行一项：可写「id|名称」或仅名称）</label>
+              <label>${escapeHtml(DeskI18n.t('coursesLabel'))}</label>
               <textarea data-courses rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .55rem;font:inherit;line-height:1.45">${escapeHtml(
                 (s.courses || [])
                   .map((c) => (c.id ? `${c.id}|${c.name}` : c.name))
                   .join('\n')
               )}</textarea>
               <div class="res-actions">
-                <button type="button" class="btn primary" data-save>保存本店资源与项目</button>
-                <button type="button" class="btn" data-reset>恢复默认</button>
+                <button type="button" class="btn primary" data-save>${escapeHtml(DeskI18n.t('saveStoreRes'))}</button>
+                <button type="button" class="btn" data-reset>${escapeHtml(DeskI18n.t('resetDefaultRes'))}</button>
               </div>
               <div class="res-msg" data-msg></div>
             </div>
@@ -171,7 +188,7 @@
           });
           const msg = card.querySelector('[data-msg]');
           msg.className = 'res-msg ok';
-          msg.textContent = '已保存资源与项目。客服端/商家端刷新后生效。';
+          msg.textContent = DeskI18n.t('savedRes');
           render();
         });
       });
@@ -183,7 +200,7 @@
           StoreRegistry.clearResourceOverride(storeId);
           const msg = card.querySelector('[data-msg]');
           msg.className = 'res-msg ok';
-          msg.textContent = '已恢复默认资源列表。';
+          msg.textContent = DeskI18n.t('restoredRes');
           render();
         });
       });
@@ -192,10 +209,8 @@
     btnEdit.addEventListener('click', () => {
       editing = !editing;
       btnEdit.classList.toggle('is-on', editing);
-      btnEdit.textContent = editing ? '完成编辑' : '编辑资源与项目';
-      editHint.textContent = editing
-        ? '编辑模式：可改资源名/数量与预约项目'
-        : '平时点击卡片进入客服端';
+      btnEdit.textContent = editing ? DeskI18n.t('doneEdit') : DeskI18n.t('editResources');
+      editHint.textContent = editing ? DeskI18n.t('editHintOn') : DeskI18n.t('editHintNormal');
       render();
     });
 

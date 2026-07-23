@@ -200,14 +200,17 @@
           (opts.selection.bedIndexes ||
             (opts.selection.bedIndex != null ? [opts.selection.bedIndex] : null))) ||
         null;
-      // 再点同一已选资源（几乎未拖动）→ 取消选择
-      if (
+      // 仅「再点当前选区」才取消；点同资源其它格应直接切到新选区
+      const clickInCurrentSelection =
         !movedFar &&
         selBeds &&
-        selBeds.length === 1 &&
-        selBeds[0] === drag.startBed &&
-        opts.onCancelSelection
-      ) {
+        selBeds.includes(drag.startBed) &&
+        opts.selection &&
+        Number.isFinite(opts.selection.startOffset) &&
+        Number.isFinite(opts.selection.endOffset) &&
+        drag.startOff >= opts.selection.startOffset &&
+        drag.startOff < opts.selection.endOffset;
+      if (clickInCurrentSelection && opts.onCancelSelection) {
         wrap.querySelectorAll('.board-selection').forEach((s) => {
           s.hidden = true;
         });
@@ -246,7 +249,8 @@
         const line = document.createElement('div');
         line.className = 'board-now-line';
         line.style.left = `${(off / span) * 100}%`;
-        line.title = `当前 ${hhmm}`;
+        line.title = `当前时间:${hhmm}`;
+        line.setAttribute('aria-label', `当前时间:${hhmm}`);
         track.appendChild(line);
       } catch (err) {}
     }
@@ -632,16 +636,42 @@
 
     if (!opts.selection) clearHourHeaderHighlight();
 
-    const legend = document.createElement('div');
-    legend.className = 'board-legend';
-    legend.innerHTML = `
+    // 底部时间轴标签行（对齐当前时刻竖线）
+    try {
+      if (opts.showNowLine !== false && dateStr === BookingStore.todayBusinessDate()) {
+        const now = new Date();
+        const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
+          now.getMinutes()
+        ).padStart(2, '0')}`;
+        const off = BookingStore.timeToOffset(hhmm);
+        if (off >= 0 && off <= span) {
+          const nowAxis = document.createElement('div');
+          nowAxis.className = 'board-row board-now-axis';
+          nowAxis.innerHTML = `<div class="board-corner"></div><div class="board-now-axis-track"></div>`;
+          const axisTrack = nowAxis.querySelector('.board-now-axis-track');
+          const lab = document.createElement('span');
+          lab.className = 'board-now-label';
+          lab.textContent = hhmm;
+          lab.style.left = `${(off / span) * 100}%`;
+          lab.title = `当前时间:${hhmm}`;
+          axisTrack.appendChild(lab);
+          wrap.appendChild(nowAxis);
+        }
+      }
+    } catch (err) {}
+
+    if (opts.showLegend !== false) {
+      const legend = document.createElement('div');
+      legend.className = 'board-legend';
+      legend.innerHTML = `
       <span><i class="lg booking"></i>已确认预约</span>
       <span><i class="lg pending"></i>待客服确认（≥2人）</span>
       <span><i class="lg hold"></i>仅预占（未建单）</span>
       <span><i class="lg closure"></i>商家关闭</span>
       <span><i class="lg selection"></i>${opts.selectionHint || '空档拖选 / 选中块可拖移与拉伸'}</span>
     `;
-    wrap.appendChild(legend);
+      wrap.appendChild(legend);
+    }
     container.appendChild(wrap);
   }
 

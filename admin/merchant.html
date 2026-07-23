@@ -1,26 +1,33 @@
 ﻿<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>商家端 · 开关床</title>
+  <title>店舗側</title>
   <link rel="stylesheet" href="styles.css">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body class="page-merchant">
   <header class="topbar">
-    <div class="brand" id="pageBrand">商家端<div class="hint" style="margin:0" id="pageSub">加载中…</div></div>
+    <div class="brand" id="pageBrand">店舗側<div class="hint" style="margin:0" id="pageSub">…</div></div>
+    <div class="topbar-right">
+      <div class="lang-switch" id="langSwitch" role="group" aria-label="Language">
+        <button type="button" data-lang="jp">JP</button>
+        <button type="button" data-lang="cn">中</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+    </div>
   </header>
 
   <main class="wrap">
     <div class="toolbar">
-      <div class="field"><label>营业日</label><input type="date" id="dateInput"></div>
-      <button class="btn" type="button" id="btnRefresh">刷新看板</button>
+      <div class="field"><label data-i18n="businessDay">営業日</label><input type="date" id="dateInput"></div>
+      <button class="btn" type="button" id="btnRefresh" data-i18n="refreshBoard">ボード更新</button>
       <span class="hint" id="remainHint"></span>
     </div>
 
     <section class="card" id="mSummaryCard">
-      <h2>今日摘要</h2>
+      <h2 data-i18n="todaySummary">本日の要約</h2>
       <p class="hint" id="mSummaryHint">—</p>
       <div class="summary-stats" id="summaryStats"></div>
       <div id="mPendingRequests"></div>
@@ -28,84 +35,84 @@
 
     <div class="grid-stack">
       <section class="card card-board desk-only">
-        <h2>资源时间轴（开关床）</h2>
-        <p class="hint">左侧「关/开」= 整日关闭 / 释放整日关。空档按住拖选关时段（拖动时弹层变淡）。再点已选同一资源可取消选择。棕线=当前时刻。</p>
+        <h2 data-i18n="boardTitle">リソース時間軸（開閉）</h2>
+        <p class="hint" data-i18n="boardHint">左側「关/开」说明</p>
         <div class="board-legend" style="margin-bottom:.65rem">
-          <span><i class="lg booking"></i>已确认预约</span>
-          <span><i class="lg pending"></i>待确认</span>
-          <span><i class="lg hold"></i>预占</span>
-          <span><i class="lg closure"></i>商家关闭</span>
-          <span><i class="lg" style="background:var(--teal-request)"></i>开床申请</span>
+          <span><i class="lg booking"></i><span data-i18n="legendBooking">確定予約</span></span>
+          <span><i class="lg pending"></i><span data-i18n="legendPending">未確定</span></span>
+          <span><i class="lg hold"></i><span data-i18n="legendHold">仮押さえ</span></span>
+          <span><i class="lg closure"></i><span data-i18n="legendClosure">店舗クローズ</span></span>
+          <span><i class="lg" style="background:var(--teal-request)"></i><span data-i18n="legendOpenReq">オープン申請</span></span>
         </div>
         <div id="board"></div>
       </section>
 
       <section class="card card-board m-only">
-        <h2>占用时间表</h2>
-        <p class="hint" id="mTimelineHint">点资源旁「关/开」整日操作；点空格关时段；点预约可查看项目。</p>
-        <div class="m-timeline" id="mTimeline"></div>
-        <div class="board-legend" style="margin-top:.65rem">
-          <span><i class="lg booking"></i>已确认</span>
-          <span><i class="lg pending"></i>待确认</span>
-          <span><i class="lg hold"></i>预占</span>
-          <span><i class="lg closure"></i>商家关闭</span>
-          <span><i class="lg" style="background:var(--teal-request)"></i>开床申请</span>
+        <h2 data-i18n="timelineTitle">占用タイムテーブル</h2>
+        <p class="hint" id="mTimelineHint" data-i18n="timelineHint">点资源旁…</p>
+        <div class="board-legend" style="margin-bottom:.55rem">
+          <span><i class="lg booking"></i><span data-i18n="legendBookingShort">確定</span></span>
+          <span><i class="lg pending"></i><span data-i18n="legendPending">未確定</span></span>
+          <span><i class="lg hold"></i><span data-i18n="legendHold">仮押さえ</span></span>
+          <span><i class="lg closure"></i><span data-i18n="legendClosure">店舗クローズ</span></span>
+          <span><i class="lg" style="background:var(--teal-request)"></i><span data-i18n="legendOpenReq">オープン申請</span></span>
         </div>
+        <div class="m-timeline" id="mTimeline"></div>
       </section>
 
       <section class="card">
-        <h2>今日预约列表</h2>
-        <p class="hint">按到店时间排序；含项目与资源。</p>
+        <h2 data-i18n="todayBookings">本日の予約一覧</h2>
+        <p class="hint" data-i18n="todayBookingsHint">按到店时间排序</p>
         <div class="list" id="bookingListToday"></div>
       </section>
 
       <section class="card">
-        <h2>当日占用（按时间）</h2>
-        <p class="hint">预约与关闭混排，大致对应时间轴；点击查看。</p>
+        <h2 data-i18n="occTitle">当日占用（時間順）</h2>
+        <p class="hint" data-i18n="occHint">预约与关闭混排</p>
         <div class="occ-strip" id="occStrip"></div>
       </section>
 
       <section class="card card-form">
-        <h2>当日关闭记录</h2>
-        <p class="hint desk-only">整日关 / 时段关分条列出，释放互不影响。也可在列表里处理开床申请。</p>
-        <p class="hint m-only">列表可分别释放或处理开床申请。</p>
+        <h2 data-i18n="closureRecords">当日クローズ記録</h2>
+        <p class="hint desk-only" data-i18n="closureHintDesk">整日关 / 时段关</p>
+        <p class="hint m-only" data-i18n="closureHintMobile">列表可分别释放</p>
         <div class="list" id="closureList"></div>
         <div class="err" id="formErr"></div>
       </section>
     </div>
   </main>
 
-  <nav class="m-dock m-only" id="mDock" aria-label="快捷操作">
-    <button type="button" data-dock="day" id="dockDay"><span class="m-dock-ico">⛔</span>整日关</button>
-    <button type="button" data-dock="range" id="dockRange"><span class="m-dock-ico">⏱</span>关时段</button>
-    <button type="button" data-dock="req" id="dockReq"><span class="m-dock-ico">✉</span>申请</button>
+  <nav class="m-dock m-only" id="mDock" aria-label="dock">
+    <button type="button" data-dock="day" id="dockDay"><span class="m-dock-ico">⛔</span><span data-i18n="dockDay">終日閉</span></button>
+    <button type="button" data-dock="range" id="dockRange"><span class="m-dock-ico">⏱</span><span data-i18n="dockRange">時間帯閉</span></button>
+    <button type="button" data-dock="req" id="dockReq"><span class="m-dock-ico">✉</span><span data-i18n="dockReq">申請</span></button>
   </nav>
 
   <div class="ctx-menu" id="sidePanel" aria-hidden="true" hidden>
     <div class="ctx-menu-head">
       <div>
-        <strong id="sideTitle">关床编辑</strong>
-        <p class="hint" id="sideHint" style="margin:0">选中后可在此确认</p>
+        <strong id="sideTitle" data-i18n="sideCloseEdit">クローズ編集</strong>
+        <p class="hint" id="sideHint" style="margin:0" data-i18n="sideHintConfirm">選中后</p>
       </div>
-      <button type="button" class="side-x m-only" id="btnSheetClose" aria-label="关闭">×</button>
+      <button type="button" class="side-x m-only" id="btnSheetClose" aria-label="close">×</button>
     </div>
     <div class="ctx-menu-body" id="sideBodyForm">
-      <div class="side-field"><label>开始</label><input id="startTime" type="time" step="1800"></div>
-      <div class="side-field"><label>结束</label><input id="endTime" type="time" step="1800"></div>
-      <div class="side-field"><label>关闭哪些资源</label><div class="bed-checks" id="sideBeds"></div></div>
+      <div class="side-field"><label data-i18n="sideStart">開始</label><input id="startTime" type="time" step="1800"></div>
+      <div class="side-field"><label data-i18n="sideEnd">終了</label><input id="endTime" type="time" step="1800"></div>
+      <div class="side-field"><label data-i18n="sideWhichBeds">閉じるリソース</label><div class="bed-checks" id="sideBeds"></div></div>
       <div class="side-field">
-        <label>原因</label>
+        <label data-i18n="sideReason">理由</label>
         <div class="reason-chips" id="reasonChips">
-          <button type="button" data-reason="临时关闭">临时关闭</button>
-          <button type="button" data-reason="线下客户占用">线下客户占用</button>
-          <button type="button" data-reason="设备维护">设备维护</button>
-          <button type="button" data-reason="店员休息">店员休息</button>
-          <button type="button" data-reason="其他">其他</button>
+          <button type="button" data-reason="临时关闭" data-i18n="reasonTemp">臨時クローズ</button>
+          <button type="button" data-reason="线下客户占用" data-i18n="reasonWalkin">来店客占用</button>
+          <button type="button" data-reason="设备维护" data-i18n="reasonMaint">設備メンテ</button>
+          <button type="button" data-reason="店员休息" data-i18n="reasonRest">スタッフ休憩</button>
+          <button type="button" data-reason="其他" data-i18n="reasonOther">その他</button>
         </div>
-        <input id="reasonOther" type="text" placeholder="请填写其他原因" hidden style="margin-top:.4rem;width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .6rem;font:inherit">
+        <input id="reasonOther" type="text" data-i18n-placeholder="reasonOtherPh" placeholder="その他" hidden style="margin-top:.4rem;width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .6rem;font:inherit">
         <input id="reason" type="hidden" value="临时关闭">
       </div>
-      <p class="hint warn" id="openReqHint" hidden style="margin:0">客服已申请开床，请选择同意或拒绝。</p>
+      <p class="hint warn" id="openReqHint" hidden style="margin:0" data-i18n="openReqHint">客服已申请开床</p>
       <div class="err" id="sideErr"></div>
     </div>
     <div class="ctx-menu-body" id="sideBodyBooking" hidden>
@@ -116,16 +123,17 @@
       <div class="err" id="sideReqErr"></div>
     </div>
     <div class="ctx-menu-foot">
-      <button type="button" class="btn primary" id="btnClose">确认关闭</button>
-      <button type="button" class="btn danger" id="btnRelease" hidden>打开（释放）</button>
-      <button type="button" class="btn primary" id="btnApproveOpen" hidden>同意开床</button>
-      <button type="button" class="btn" id="btnRejectOpen" hidden>拒绝申请</button>
+      <button type="button" class="btn primary" id="btnClose" data-i18n="btnConfirmClose">クローズ確定</button>
+      <button type="button" class="btn danger" id="btnRelease" hidden data-i18n="btnRelease">開く（解除）</button>
+      <button type="button" class="btn primary" id="btnApproveOpen" hidden data-i18n="btnApprove">承認して開く</button>
+      <button type="button" class="btn" id="btnRejectOpen" hidden data-i18n="btnReject">申請を拒否</button>
     </div>
   </div>
   <div class="m-sheet-scrim m-only" id="mSheetScrim" hidden></div>
 
-  <script src="stores.js?v=20260722-p0"></script>
+  <script src="stores.js"></script>
   <script src="store.js"></script>
+  <script src="desk-i18n.js"></script>
   <script src="board-render.js"></script>
   <script src="merchant-app.js"></script>
 </body>

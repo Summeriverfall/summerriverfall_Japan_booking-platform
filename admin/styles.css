@@ -34,6 +34,37 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--line); backdrop-filter: blur(8px);
   position: sticky; top: 0; z-index: 20;
 }
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: #fff;
+  flex-shrink: 0;
+}
+.lang-switch button {
+  border: none;
+  background: transparent;
+  padding: .4rem .65rem;
+  font: inherit;
+  font-size: .78rem;
+  color: var(--muted);
+  cursor: pointer;
+  min-height: 36px;
+}
+.lang-switch button.is-on {
+  background: rgba(184,149,107,.18);
+  color: #8a6a3e;
+  font-weight: 600;
+}
 .brand { font-weight: 700; letter-spacing: .04em; }
 .brand small { display: block; font-weight: 400; color: var(--muted); font-size: .78rem; }
 .nav { display: flex; gap: .5rem; flex-wrap: wrap; }
@@ -187,8 +218,31 @@ a:hover { text-decoration: underline; }
   margin-left: -1px;
   background: rgba(139, 105, 50, 0.5);
   box-shadow: 0 0 0 1px rgba(139, 105, 50, 0.15);
-  z-index: 5;
+  z-index: 6;
   pointer-events: none;
+}
+.board-now-label {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  font-size: .65rem;
+  font-weight: 500;
+  line-height: 1;
+  color: rgba(139, 105, 50, 0.55);
+  white-space: nowrap;
+  pointer-events: none;
+  letter-spacing: .02em;
+}
+.board-now-axis {
+  min-height: 18px;
+  margin: 0;
+}
+.board-now-axis .board-corner {
+  /* matches board grid column */
+}
+.board-now-axis-track {
+  position: relative;
+  height: 18px;
 }
 .ctx-menu.is-drag-faded {
   opacity: 0.2 !important;
@@ -346,6 +400,9 @@ a:hover { text-decoration: underline; }
 }
 .board-legend .lg.selection { background: #8b6932; }
 .board-row:last-of-type .board-track {
+  border-radius: 0 0 6px 6px;
+}
+.board-row:has(+ .board-now-axis) .board-track {
   border-radius: 0 0 6px 6px;
 }
 .board-hour-grid {
@@ -713,10 +770,14 @@ a:hover { text-decoration: underline; }
   .page-merchant .desk-only { display: none !important; }
   .page-merchant .m-dock.m-only { display: grid !important; }
   .page-merchant .topbar {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     gap: .5rem;
     padding: .75rem .9rem;
+  }
+  .page-merchant .topbar-right {
+    margin-left: auto;
   }
   .page-merchant .nav { width: 100%; }
   .page-merchant .nav a {

@@ -467,8 +467,62 @@
     return { ok: true, released: targets.length };
   }
 
-  function setClosure(input) {
+  /**
+   * 从关闭记录中去掉某资源；若去掉后无床则整条释放。
+   * 用于整日关前清掉该资源上的时段关。
+   */
+  function removeBedFromClosure(closureId, bedIndex) {
     const state = load();
+    const c = state.closures.find((x) => x.id === closureId && x.active !== false);
+    if (!c) return { ok: false, error: '找不到关闭记录' };
+    const bed = Number(bedIndex);
+    const rest = (c.beds || []).filter((b) => b !== bed);
+    if (!rest.length) {
+      c.active = false;
+      c.releasedAt = new Date().toISOString();
+      c.releasedReason = '被整日关闭覆盖';
+    } else {
+      c.beds = rest;
+      c.updatedAt = new Date().toISOString();
+    }
+    save(state);
+    return { ok: true, closure: c };
+  }
+
+  /** 整日关闭某资源：覆盖其已有时段关，已整日关则拒绝重复 */
+  function closeDayBed(dateStr, bedIndex, meta) {
+    const bed = Number(bedIndex);
+    if (hasDayClosureForBed(dateStr, bed)) {
+      const name = (CFG().bedLabels && CFG().bedLabels[bed]) || `${bed + 1}`;
+      return {
+        ok: false,
+        error: `「${name}」已整日关闭，不能重复关闭。请先点左侧「开」释放后再关。`,
+      };
+    }
+
+    const startTime = offsetToTime(0);
+    const endTime = offsetToTime(businessSpanMinutes());
+
+    // 清掉该资源上所有重叠的时段关（整日关覆盖）
+    const overlaps = findOverlappingClosures(dateStr, startTime, endTime, [bed]);
+    overlaps.forEach((c) => {
+      if (isDayScopeClosure(c)) return;
+      removeBedFromClosure(c.id, bed);
+    });
+
+    return setClosure({
+      date: dateStr,
+      startTime,
+      endTime,
+      beds: [bed],
+      reason: (meta && meta.reason) || '临时关闭',
+      reasonCode: (meta && meta.reasonCode) || '',
+      scope: 'day',
+      absorbOverlaps: true,
+    });
+  }
+
+  function setClosure(input) {
     const start = timeToOffset(input.startTime);
     const end = timeToOffset(input.endTime);
     if (end <= start) return { ok: false, error: '结束时间必须晚于开始时间（注意跨午夜）' };
@@ -494,12 +548,30 @@
       }
     }
 
-    const conflicts = findOverlappingClosures(
+    let conflicts = findOverlappingClosures(
       input.date,
       input.startTime,
       input.endTime,
       beds
     );
+
+    // 整日关：自动吸收（覆盖）重叠的时段关，不再拦截
+    if (scope === 'day' && (input.absorbOverlaps || conflicts.length)) {
+      conflicts
+        .filter((c) => !isDayScopeClosure(c))
+        .forEach((c) => {
+          beds.forEach((bed) => {
+            if ((c.beds || []).includes(bed)) removeBedFromClosure(c.id, bed);
+          });
+        });
+      conflicts = findOverlappingClosures(
+        input.date,
+        input.startTime,
+        input.endTime,
+        beds
+      ).filter((c) => isDayScopeClosure(c));
+    }
+
     if (conflicts.length) {
       const names = conflicts
         .map((c) => {
@@ -517,6 +589,8 @@
       };
     }
 
+    // 重新 load，因上面可能已 save 过
+    const state2 = load();
     const closure = {
       id: uid('cl'),
       date: input.date,
@@ -529,8 +603,8 @@
       active: true,
       createdAt: new Date().toISOString(),
     };
-    state.closures.push(closure);
-    save(state);
+    state2.closures.push(closure);
+    save(state2);
     return { ok: true, closure };
   }
 
@@ -709,6 +783,7 @@
     findDayClosuresForBed,
     hasDayClosureForBed,
     openDayBed,
+    closeDayBed,
     requestOpenBed,
     respondOpenRequest,
     getDailyEmailTime,

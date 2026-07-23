@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>スタッフ作業記録</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Shippori+Mincho:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tech.css">
+</head>
+<body class="tech-body">
+  <div class="tech-shell">
+    <header class="tech-top">
+      <div class="tech-brand">
+        <h1 id="pageTitle">スタッフ作業記録</h1>
+        <div class="sub" id="pageSub">—</div>
+      </div>
+      <div class="tech-top-actions">
+        <div class="lang-switch" id="langSwitch" aria-label="Language">
+          <button type="button" data-lang="jp">JP</button>
+          <button type="button" data-lang="cn">中</button>
+          <button type="button" data-lang="en">EN</button>
+        </div>
+        <button type="button" class="btn-ghost" id="btnLogout" data-i18n="logout">ログアウト</button>
+      </div>
+    </header>
+
+    <nav class="tech-tabs" role="tablist">
+      <button type="button" class="tech-tab is-on" id="tabLog" data-tab="log" data-i18n="tabLog">記録する</button>
+      <button type="button" class="tech-tab" id="tabBoard" data-tab="board" data-i18n="tabBoard">本日の配置</button>
+    </nav>
+
+    <section class="tech-panel is-on" id="panelLog" role="tabpanel">
+      <div class="step-bar" id="stepBar">
+        <div class="step-pill is-active" data-step="1" data-i18n="step1">① リソース</div>
+        <div class="step-pill" data-step="2" data-i18n="step2">② 時間</div>
+        <div class="step-pill" data-step="3" data-i18n="step3">③ コース</div>
+      </div>
+      <div class="pick-summary" id="pickSummary"></div>
+
+      <div id="step1">
+        <div class="section-label" data-i18n="pickResource">どの部屋／ベッド？</div>
+        <div class="tap-grid" id="resourceGrid"></div>
+      </div>
+
+      <div id="step2" hidden>
+        <div class="section-label" data-i18n="pickStart">開始時刻</div>
+        <div class="time-grid" id="startGrid"></div>
+        <div class="section-label" style="margin-top:.9rem" data-i18n="pickDuration">施術時間</div>
+        <div class="dur-row" id="durRow"></div>
+      </div>
+
+      <div id="step3" hidden>
+        <div class="section-label" data-i18n="pickCourse">コース（タップで自動送信）</div>
+        <p class="section-hint" id="courseHint"></p>
+        <div class="course-grid" id="courseGrid"></div>
+      </div>
+    </section>
+
+    <section class="tech-panel" id="panelBoard" role="tabpanel">
+      <div class="board-toolbar">
+        <label>
+          <span data-i18n="today">営業日</span>
+          <input type="date" id="dateInput">
+        </label>
+        <div class="filter-row" id="viewFilter">
+          <button type="button" class="is-on" data-view="tech" data-i18n="byTech">スタッフ別</button>
+          <button type="button" data-view="time" data-i18n="byTime">時間順</button>
+        </div>
+        <div class="filter-row" id="scopeFilter">
+          <button type="button" data-scope="me" data-i18n="me">自分</button>
+          <button type="button" class="is-on" data-scope="all" data-i18n="all">全員</button>
+        </div>
+        <button type="button" class="btn-ghost" id="btnRefresh" data-i18n="refresh">更新</button>
+      </div>
+      <div id="boardRoot"></div>
+    </section>
+  </div>
+
+  <div class="tech-toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="stores.js"></script>
+  <script src="store.js"></script>
+  <script src="tech-i18n.js"></script>
+  <script src="tech-work.js"></script>
+  <script src="tech-app.js"></script>
+</body>
+</html>
