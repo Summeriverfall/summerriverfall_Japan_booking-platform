@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>スタッフ作業記録</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Shippori+Mincho:wght@600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="tech.css?v=2">
+  <link rel="stylesheet" href="tech.css?v=3">
 </head>
 <body class="tech-body">
   <div class="tech-shell">
@@ -24,7 +24,6 @@
       </div>
     </header>
 
-    <!-- 今日安排总览（置顶） -->
     <section class="day-overview" id="dayOverview" aria-labelledby="dayOverviewTitle">
       <div class="day-overview-head">
         <div>
@@ -46,7 +45,6 @@
       <div class="day-overview-body" id="boardRoot"></div>
     </section>
 
-    <!-- 记工：同一页选技师 / 资源 / 时间 / 项目 -->
     <section class="log-sheet" aria-labelledby="logSheetTitle">
       <div class="log-sheet-head">
         <h2 class="log-sheet-title" id="logSheetTitle" data-i18n="tabLog">記録する</h2>
@@ -59,25 +57,19 @@
       </div>
 
       <div class="pick-block">
-        <div class="section-label" data-i18n="pickResource">どの部屋／ベッド？</div>
-        <div class="tap-grid" id="resourceGrid"></div>
-      </div>
-
-      <div class="pick-block pick-block--time">
-        <div class="time-col">
-          <div class="section-label" data-i18n="pickStart">開始時刻</div>
-          <div class="time-grid" id="startGrid"></div>
-        </div>
-        <div class="dur-col">
-          <div class="section-label" data-i18n="pickDuration">施術時間</div>
-          <div class="dur-row" id="durRow"></div>
-        </div>
+        <div class="section-label" data-i18n="pickCourse">コース</div>
+        <p class="section-hint" data-i18n="courseHint">コースを選ぶと施術時間が自動で入ります。表で開始位置を選んでから「送信」</p>
+        <div class="course-grid" id="courseGrid"></div>
       </div>
 
       <div class="pick-block">
-        <div class="section-label" data-i18n="pickCourse">コース（タップで自動送信）</div>
-        <p class="section-hint" id="courseHint" data-i18n="courseHint"></p>
-        <div class="course-grid" id="courseGrid"></div>
+        <div class="section-label" data-i18n="pickSlot">時間表（セルをタップして開始位置を選ぶ）</div>
+        <div class="tech-board-wrap" id="slotBoard"></div>
+      </div>
+
+      <div class="submit-bar">
+        <button type="button" class="btn-submit" id="btnSubmit" data-i18n="submit">送信して保存</button>
+        <button type="button" class="btn-ghost" id="btnClear" data-i18n="clearPick">選択クリア</button>
       </div>
     </section>
   </div>
@@ -86,8 +78,8 @@
 
   <script src="stores.js"></script>
   <script src="store.js"></script>
-  <script src="tech-i18n.js?v=2"></script>
-  <script src="tech-work.js?v=2"></script>
-  <script src="tech-app.js?v=2"></script>
+  <script src="tech-i18n.js?v=3"></script>
+  <script src="tech-work.js?v=3"></script>
+  <script src="tech-app.js?v=3"></script>
 </body>
 </html>
