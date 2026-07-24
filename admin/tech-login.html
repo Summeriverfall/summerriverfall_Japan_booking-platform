@@ -22,15 +22,12 @@
       </div>
       <p class="eyebrow">Staff</p>
       <h1 data-i18n="loginTitle">スタッフログイン</h1>
-      <p class="lede" data-i18n="loginSub">店舗コードとスタッフコードを入力</p>
+      <p class="lede" data-i18n="loginSub">店舗コードを入力（スタッフは作業画面で選択）</p>
     </header>
 
     <form class="login-card" id="loginForm">
       <label class="login-label" for="storeCode" data-i18n="storeCode">店舗コード</label>
       <input class="login-input" id="storeCode" name="storeCode" autocomplete="off" placeholder="RUANA88" required>
-
-      <label class="login-label" for="techCode" data-i18n="techCode">スタッフコード</label>
-      <input class="login-input" id="techCode" name="techCode" autocomplete="off" placeholder="R1" required>
 
       <p class="login-err" id="loginErr" hidden></p>
       <button class="login-btn" type="submit" data-i18n="loginBtn" style="background:#4a6b52">入る</button>
@@ -38,9 +35,9 @@
       <div class="login-hint">
         <p data-i18n="testHint">テストコード例</p>
         <ul>
-          <li><code>RUANA88</code> + <code>R1</code>–<code>R4</code></li>
-          <li><code>STARRY88</code> + <code>S1</code>–<code>S4</code></li>
-          <li><code>LUNA88</code> + <code>L1</code>–<code>L4</code></li>
+          <li><code>RUANA88</code></li>
+          <li><code>STARRY88</code></li>
+          <li><code>LUNA88</code></li>
         </ul>
       </div>
     </form>
@@ -72,22 +69,15 @@
       e.preventDefault();
       const err = document.getElementById('loginErr');
       const storeCode = document.getElementById('storeCode').value;
-      const techCode = document.getElementById('techCode').value;
       const store = StoreRegistry.findByAccessCode(storeCode);
       if (!store) {
         err.hidden = false;
         err.textContent = TechI18n.t('loginErr');
         return;
       }
-      const tech = StoreRegistry.findTechnicianByCode(store.storeId, techCode);
-      if (!tech) {
-        err.hidden = false;
-        err.textContent = TechI18n.t('loginErr');
-        return;
-      }
       StoreRegistry.applyStore(store.storeId);
       StoreRegistry.setRole('technician');
-      StoreRegistry.setTechnician(tech.id);
+      StoreRegistry.setTechnician(null);
       location.href = 'tech.html?store=' + encodeURIComponent(store.storeId);
     });
 

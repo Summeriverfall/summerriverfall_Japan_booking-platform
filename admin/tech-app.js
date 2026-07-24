@@ -1,54 +1,52 @@
 /**
- * 技师工作端：三步记工 + 当日安排
+ * 技师工作端：单页记工（技师名 + 资源 + 时间 + 项目）+ 顶部今日安排总览
  */
 (function () {
   if (!StoreRegistry.requireStoreOrRedirect('tech-login.html')) return;
-  if (StoreRegistry.getRole() !== 'technician' || !StoreRegistry.getTechnician()) {
+  if (StoreRegistry.getRole() !== 'technician') {
     location.replace('tech-login.html');
     return;
   }
 
   const cfg = STORE_CONFIG;
-  const me = StoreRegistry.getTechnician();
   const DURATIONS = [30, 45, 60, 90, 120];
+  const techs = cfg.technicians || [];
 
   const state = {
-    step: 1,
+    techId: StoreRegistry.getTechnicianId() || (techs[0] && techs[0].id) || null,
     bedIndex: null,
     startTime: null,
     duration: 60,
-    /** 记工始终写「当前营业日」；看板可另选日期回看 */
     logDate: BookingStore.todayBusinessDate(),
     boardDate: BookingStore.todayBusinessDate(),
-    boardView: 'tech',
-    boardScope: 'all',
+    boardView: 'time',
   };
+
+  if (state.techId) StoreRegistry.setTechnician(state.techId);
 
   const els = {
     pageTitle: document.getElementById('pageTitle'),
     pageSub: document.getElementById('pageSub'),
     langSwitch: document.getElementById('langSwitch'),
     btnLogout: document.getElementById('btnLogout'),
-    tabLog: document.getElementById('tabLog'),
-    tabBoard: document.getElementById('tabBoard'),
-    panelLog: document.getElementById('panelLog'),
-    panelBoard: document.getElementById('panelBoard'),
-    stepBar: document.getElementById('stepBar'),
     pickSummary: document.getElementById('pickSummary'),
-    step1: document.getElementById('step1'),
-    step2: document.getElementById('step2'),
-    step3: document.getElementById('step3'),
+    techGrid: document.getElementById('techGrid'),
     resourceGrid: document.getElementById('resourceGrid'),
     startGrid: document.getElementById('startGrid'),
     durRow: document.getElementById('durRow'),
     courseGrid: document.getElementById('courseGrid'),
+    courseHint: document.getElementById('courseHint'),
     dateInput: document.getElementById('dateInput'),
     boardRoot: document.getElementById('boardRoot'),
+    dayCount: document.getElementById('dayCount'),
     toast: document.getElementById('toast'),
     viewFilter: document.getElementById('viewFilter'),
-    scopeFilter: document.getElementById('scopeFilter'),
     btnRefresh: document.getElementById('btnRefresh'),
   };
+
+  function selectedTech() {
+    return techs.find((t) => t.id === state.techId) || null;
+  }
 
   function resourceLabel(i) {
     if (window.DeskI18n && DeskI18n.bedLabelAt) return DeskI18n.bedLabelAt(i);
@@ -101,9 +99,14 @@
       (cfg.storeName && (cfg.storeName[lang] || cfg.storeName.jp || cfg.storeName.cn)) ||
       cfg.storeId;
     els.pageTitle.textContent = TechI18n.t('portalTitle');
-    els.pageSub.textContent = `${storeName} · ${TechI18n.techName(me)}`;
+    els.pageSub.textContent = storeName;
     document.title = TechI18n.t('portalTitle');
+    renderAll();
+  }
+
+  function renderAll() {
     renderSummary();
+    renderTechs();
     renderResources();
     renderTimes();
     renderDurations();
@@ -113,6 +116,8 @@
 
   function renderSummary() {
     const parts = [];
+    const tech = selectedTech();
+    if (tech) parts.push(TechI18n.techName(tech));
     if (state.bedIndex != null) parts.push(resourceLabel(state.bedIndex));
     if (state.startTime) {
       const end = addMinutes(state.startTime, state.duration);
@@ -123,17 +128,29 @@
       : TechI18n.t('portalSub');
   }
 
-  function setStep(n) {
-    state.step = n;
-    els.step1.hidden = n !== 1;
-    els.step2.hidden = n !== 2;
-    els.step3.hidden = n !== 3;
-    els.stepBar.querySelectorAll('.step-pill').forEach((pill) => {
-      const s = Number(pill.dataset.step);
-      pill.classList.toggle('is-active', s === n);
-      pill.classList.toggle('is-done', s < n);
+  function renderTechs() {
+    els.techGrid.innerHTML = '';
+    if (!techs.length) {
+      const empty = document.createElement('p');
+      empty.className = 'section-hint';
+      empty.textContent = TechI18n.t('noTech');
+      els.techGrid.appendChild(empty);
+      return;
+    }
+    techs.forEach((tech) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tap-tile tap-tile--person' + (state.techId === tech.id ? ' is-on' : '');
+      const code = tech.code ? `<span class="tap-code">${tech.code}</span>` : '';
+      btn.innerHTML = `<span class="tap-name">${TechI18n.techName(tech)}</span>${code}`;
+      btn.addEventListener('click', () => {
+        state.techId = tech.id;
+        StoreRegistry.setTechnician(tech.id);
+        renderTechs();
+        renderSummary();
+      });
+      els.techGrid.appendChild(btn);
     });
-    renderSummary();
   }
 
   function renderResources() {
@@ -146,9 +163,8 @@
       btn.textContent = resourceLabel(i);
       btn.addEventListener('click', () => {
         state.bedIndex = i;
-        setStep(2);
         renderResources();
-        renderTimes();
+        renderSummary();
       });
       els.resourceGrid.appendChild(btn);
     }
@@ -159,13 +175,12 @@
     startTimes().forEach((t) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'tap-tile' + (state.startTime === t ? ' is-on' : '');
+      btn.className = 'tap-tile tap-tile--time' + (state.startTime === t ? ' is-on' : '');
       btn.textContent = t;
       btn.addEventListener('click', () => {
         state.startTime = t;
         renderTimes();
         renderSummary();
-        if (state.duration) setStep(3);
       });
       els.startGrid.appendChild(btn);
     });
@@ -182,7 +197,6 @@
         state.duration = d;
         renderDurations();
         renderSummary();
-        if (state.startTime) setStep(3);
       });
       els.durRow.appendChild(btn);
     });
@@ -208,8 +222,8 @@
   }
 
   function saveLog(course) {
-    if (state.bedIndex == null || !state.startTime) {
-      setStep(state.bedIndex == null ? 1 : 2);
+    if (!state.techId || state.bedIndex == null || !state.startTime) {
+      showToast(TechI18n.t('needPick'));
       return;
     }
     const duration = guessDurationFromCourse(course) || state.duration || 60;
@@ -217,7 +231,7 @@
     const endTime = addMinutes(state.startTime, duration);
     const res = TechWorkStore.addLog({
       date: state.logDate || BookingStore.todayBusinessDate(),
-      technicianId: me.id,
+      technicianId: state.techId,
       bedIndex: state.bedIndex,
       startTime: state.startTime,
       endTime,
@@ -230,28 +244,28 @@
       state.bedIndex = null;
       state.startTime = null;
       state.duration = 60;
-      setStep(1);
       renderResources();
       renderTimes();
       renderDurations();
-      if (els.panelBoard.classList.contains('is-on')) renderBoard();
+      renderSummary();
+      renderBoard();
     }
   }
 
   function findTech(id) {
-    return (cfg.technicians || []).find((t) => t.id === id) || null;
+    return techs.find((t) => t.id === id) || null;
   }
 
-  function filteredLogs() {
-    let logs = TechWorkStore.listByDate(state.boardDate);
-    if (state.boardScope === 'me') {
-      logs = logs.filter((l) => l.technicianId === me.id);
-    }
-    return logs;
+  function dayLogs() {
+    return TechWorkStore.listByDate(state.boardDate);
   }
 
   function renderBoard() {
-    const logs = filteredLogs();
+    const logs = dayLogs();
+    const unit = TechI18n.t('dayCount');
+    els.dayCount.textContent = unit
+      ? `${logs.length} ${unit}`
+      : String(logs.length);
     els.boardRoot.innerHTML = '';
     if (!logs.length) {
       const empty = document.createElement('div');
@@ -263,24 +277,19 @@
 
     if (state.boardView === 'time') {
       const wrap = document.createElement('div');
-      wrap.className = 'time-list';
+      wrap.className = 'time-list time-list--compact';
       logs.forEach((log) => wrap.appendChild(logCard(log, true)));
       els.boardRoot.appendChild(wrap);
       return;
     }
 
-    const techs =
-      state.boardScope === 'me'
-        ? [me]
-        : cfg.technicians && cfg.technicians.length
-          ? cfg.technicians
-          : [me];
     const cols = document.createElement('div');
     cols.className = 'tech-columns';
-    techs.forEach((tech) => {
+    const list = techs.length ? techs : [];
+    list.forEach((tech) => {
       const mine = logs.filter((l) => l.technicianId === tech.id);
       const col = document.createElement('div');
-      col.className = 'tech-col' + (tech.id === me.id ? ' is-me' : '');
+      col.className = 'tech-col' + (tech.id === state.techId ? ' is-me' : '');
       col.innerHTML = `<h3><span>${TechI18n.techName(tech)}</span><span class="count">${mine.length}</span></h3>`;
       if (!mine.length) {
         const p = document.createElement('p');
@@ -313,31 +322,21 @@
     }
     html += `<div>${TechI18n.courseLabel(course) || log.courseName || ''}</div></div>`;
     el.innerHTML = html;
-    if (log.technicianId === me.id) {
-      const actions = document.createElement('div');
-      actions.className = 'row-actions';
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'btn-del';
-      del.textContent = TechI18n.t('delete');
-      del.addEventListener('click', () => {
-        if (!confirm(TechI18n.t('confirmDelete'))) return;
-        TechWorkStore.removeLog(log.id);
-        renderBoard();
-      });
-      actions.appendChild(del);
-      el.appendChild(actions);
-    }
-    return el;
-  }
 
-  function showTab(name) {
-    const isLog = name === 'log';
-    els.tabLog.classList.toggle('is-on', isLog);
-    els.tabBoard.classList.toggle('is-on', !isLog);
-    els.panelLog.classList.toggle('is-on', isLog);
-    els.panelBoard.classList.toggle('is-on', !isLog);
-    if (!isLog) renderBoard();
+    const actions = document.createElement('div');
+    actions.className = 'row-actions';
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn-del';
+    del.textContent = TechI18n.t('delete');
+    del.addEventListener('click', () => {
+      if (!confirm(TechI18n.t('confirmDelete'))) return;
+      TechWorkStore.removeLog(log.id);
+      renderBoard();
+    });
+    actions.appendChild(del);
+    el.appendChild(actions);
+    return el;
   }
 
   els.langSwitch.addEventListener('click', (e) => {
@@ -353,21 +352,12 @@
     location.href = 'tech-login.html';
   });
 
-  els.tabLog.addEventListener('click', () => showTab('log'));
-  els.tabBoard.addEventListener('click', () => showTab('board'));
-
-  els.stepBar.addEventListener('click', (e) => {
-    const pill = e.target.closest('.step-pill');
-    if (!pill) return;
-    const s = Number(pill.dataset.step);
-    if (s === 1) setStep(1);
-    else if (s === 2 && state.bedIndex != null) setStep(2);
-    else if (s === 3 && state.bedIndex != null && state.startTime) setStep(3);
-  });
-
   els.dateInput.value = state.boardDate;
   els.dateInput.addEventListener('change', () => {
     state.boardDate = els.dateInput.value || BookingStore.todayBusinessDate();
+    if (state.boardDate === BookingStore.todayBusinessDate()) {
+      state.logDate = state.boardDate;
+    }
     renderBoard();
   });
 
@@ -381,25 +371,8 @@
     renderBoard();
   });
 
-  els.scopeFilter.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-scope]');
-    if (!btn) return;
-    state.boardScope = btn.dataset.scope;
-    els.scopeFilter.querySelectorAll('button').forEach((b) => {
-      b.classList.toggle('is-on', b === btn);
-    });
-    renderBoard();
-  });
-
   els.btnRefresh.addEventListener('click', () => renderBoard());
-  window.addEventListener('tech-work-changed', () => {
-    if (els.panelBoard.classList.contains('is-on')) renderBoard();
-  });
+  window.addEventListener('tech-work-changed', () => renderBoard());
 
-  if (!(cfg.technicians || []).length) {
-    els.pageSub.textContent = TechI18n.t('noTech');
-  }
-
-  setStep(1);
   applyI18n();
 })();

@@ -24,55 +24,61 @@
       </div>
     </header>
 
-    <nav class="tech-tabs" role="tablist">
-      <button type="button" class="tech-tab is-on" id="tabLog" data-tab="log" data-i18n="tabLog">記録する</button>
-      <button type="button" class="tech-tab" id="tabBoard" data-tab="board" data-i18n="tabBoard">本日の配置</button>
-    </nav>
-
-    <section class="tech-panel is-on" id="panelLog" role="tabpanel">
-      <div class="step-bar" id="stepBar">
-        <div class="step-pill is-active" data-step="1" data-i18n="step1">① リソース</div>
-        <div class="step-pill" data-step="2" data-i18n="step2">② 時間</div>
-        <div class="step-pill" data-step="3" data-i18n="step3">③ コース</div>
+    <!-- 今日安排总览（置顶） -->
+    <section class="day-overview" id="dayOverview" aria-labelledby="dayOverviewTitle">
+      <div class="day-overview-head">
+        <div>
+          <h2 class="day-overview-title" id="dayOverviewTitle" data-i18n="tabBoard">本日の配置</h2>
+          <p class="day-overview-count" id="dayCount">—</p>
+        </div>
+        <div class="day-overview-tools">
+          <label class="date-field">
+            <span data-i18n="today">営業日</span>
+            <input type="date" id="dateInput">
+          </label>
+          <div class="filter-row" id="viewFilter">
+            <button type="button" class="is-on" data-view="time" data-i18n="byTime">時間順</button>
+            <button type="button" data-view="tech" data-i18n="byTech">スタッフ別</button>
+          </div>
+          <button type="button" class="btn-ghost" id="btnRefresh" data-i18n="refresh">更新</button>
+        </div>
       </div>
-      <div class="pick-summary" id="pickSummary"></div>
+      <div class="day-overview-body" id="boardRoot"></div>
+    </section>
 
-      <div id="step1">
+    <!-- 记工：同一页选技师 / 资源 / 时间 / 项目 -->
+    <section class="log-sheet" aria-labelledby="logSheetTitle">
+      <div class="log-sheet-head">
+        <h2 class="log-sheet-title" id="logSheetTitle" data-i18n="tabLog">記録する</h2>
+        <div class="pick-summary" id="pickSummary"></div>
+      </div>
+
+      <div class="pick-block">
+        <div class="section-label" data-i18n="pickTech">スタッフ</div>
+        <div class="tap-grid tap-grid--people" id="techGrid"></div>
+      </div>
+
+      <div class="pick-block">
         <div class="section-label" data-i18n="pickResource">どの部屋／ベッド？</div>
         <div class="tap-grid" id="resourceGrid"></div>
       </div>
 
-      <div id="step2" hidden>
-        <div class="section-label" data-i18n="pickStart">開始時刻</div>
-        <div class="time-grid" id="startGrid"></div>
-        <div class="section-label" style="margin-top:.9rem" data-i18n="pickDuration">施術時間</div>
-        <div class="dur-row" id="durRow"></div>
+      <div class="pick-block pick-block--time">
+        <div class="time-col">
+          <div class="section-label" data-i18n="pickStart">開始時刻</div>
+          <div class="time-grid" id="startGrid"></div>
+        </div>
+        <div class="dur-col">
+          <div class="section-label" data-i18n="pickDuration">施術時間</div>
+          <div class="dur-row" id="durRow"></div>
+        </div>
       </div>
 
-      <div id="step3" hidden>
+      <div class="pick-block">
         <div class="section-label" data-i18n="pickCourse">コース（タップで自動送信）</div>
-        <p class="section-hint" id="courseHint"></p>
+        <p class="section-hint" id="courseHint" data-i18n="courseHint"></p>
         <div class="course-grid" id="courseGrid"></div>
       </div>
-    </section>
-
-    <section class="tech-panel" id="panelBoard" role="tabpanel">
-      <div class="board-toolbar">
-        <label>
-          <span data-i18n="today">営業日</span>
-          <input type="date" id="dateInput">
-        </label>
-        <div class="filter-row" id="viewFilter">
-          <button type="button" class="is-on" data-view="tech" data-i18n="byTech">スタッフ別</button>
-          <button type="button" data-view="time" data-i18n="byTime">時間順</button>
-        </div>
-        <div class="filter-row" id="scopeFilter">
-          <button type="button" data-scope="me" data-i18n="me">自分</button>
-          <button type="button" class="is-on" data-scope="all" data-i18n="all">全員</button>
-        </div>
-        <button type="button" class="btn-ghost" id="btnRefresh" data-i18n="refresh">更新</button>
-      </div>
-      <div id="boardRoot"></div>
     </section>
   </div>
 
