@@ -32,7 +32,7 @@
   DeskI18n.onChange(() => {
     DeskI18n.applyDom();
     updateChrome();
-    refresh();
+    softRefresh();
   });
 
   function snapTimeInput(el) {
@@ -102,14 +102,18 @@
 
   function courseNameOf(booking) {
     if (!booking) return '—';
-    if (booking.courseName) return booking.courseName;
     const course = (STORE_CONFIG.courses || []).find((c) => c.id === booking.courseId);
-    return (course && course.name) || booking.courseId || '—';
+    if (course) return DeskI18n.courseLabel(course);
+    if (booking.courseName) {
+      if (typeof booking.courseName === 'object') return DeskI18n.localizedText(booking.courseName);
+      return booking.courseName;
+    }
+    return booking.courseId || '—';
   }
 
   function statusLabel(s) {
     if (s === 'confirmed') return '已确认';
-    if (s === 'pending_confirm') return '待确认';
+    if (s === 'pending_confirm') return DeskI18n.t('statusPending');
     if (s === 'hold') return '预占';
     if (s === 'cancelled') return '已取消';
     return s || '—';
@@ -170,10 +174,10 @@
     const set = new Set((selected || []).map(Number));
     sideBeds.innerHTML = STORE_CONFIG.bedLabels
       .map(
-        (name, i) =>
+        (raw, i) =>
           `<label class="bed-check-item"><input type="checkbox" value="${i}" ${
             set.has(i) ? 'checked' : ''
-          }><span class="bed-check-text">${name}</span></label>`
+          }><span class="bed-check-text">${DeskI18n.bedLabelAt(i)}</span></label>`
       )
       .join('');
   }
@@ -374,7 +378,7 @@
   }
 
   function closeDayBed(bedIndex) {
-    const name = STORE_CONFIG.bedLabels[bedIndex] || `${bedIndex + 1}号资源`;
+    const name = DeskI18n.bedLabelAt(bedIndex);
     if (BookingStore.hasDayClosureForBed(currentDate(), bedIndex)) {
       formErr.className = 'err';
       formErr.textContent = `「${name}」已整日关闭，不能重复关闭。请先点「开」释放。`;
@@ -415,7 +419,7 @@
   }
 
   function openDayBedRow(bedIndex) {
-    const name = STORE_CONFIG.bedLabels[bedIndex] || `${bedIndex + 1}号资源`;
+    const name = DeskI18n.bedLabelAt(bedIndex);
     const r = BookingStore.openDayBed(currentDate(), bedIndex);
     if (!r.ok) {
       formErr.className = 'err';
@@ -466,7 +470,7 @@
     renderSideBeds([bedIndex]);
     if (sideTitle) sideTitle.textContent = '关时段';
     setDockOn('range');
-    openSide(msg || `${STORE_CONFIG.bedLabels[bedIndex]} · 请确认后关闭`, {
+    openSide(msg || `${DeskI18n.bedLabelAt(bedIndex)} · 请确认后关闭`, {
       x: window.innerWidth / 2,
       y: window.innerHeight - 80,
     });
@@ -509,7 +513,7 @@
     sheetMode = 'booking';
     rangeSelection = null;
     const beds = (booking.beds || [])
-      .map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}`)
+      .map((i) => DeskI18n.bedLabelAt(i))
       .join('、');
     const channel = (STORE_CONFIG.channels || []).find((c) => c.id === booking.channelId);
     const endOff =
@@ -551,7 +555,7 @@
     }
     sideRequestList.innerHTML = requests
       .map((c) => {
-        const beds = (c.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+        const beds = (c.beds || []).map((i) => DeskI18n.bedLabelAt(i)).join('、');
         const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
         return `<div class="item" data-req-id="${c.id}">
           <div class="title">${kind} · ${beds} · ${c.startTime}–${c.endTime}</div>
@@ -585,7 +589,7 @@
     if (summaryStats) {
       summaryStats.innerHTML = `
         <span>已确认 <strong>${confirmed}</strong></span>
-        <span>待确认 <strong>${pending}</strong></span>
+        <span>${DeskI18n.t('pendingStat')} <strong>${pending}</strong></span>
         <span>预占 <strong>${holds}</strong></span>
         <span>整日关 <strong>${dayClosures}</strong></span>
         <span>时段关 <strong>${slotClosures}</strong></span>
@@ -604,7 +608,7 @@
       bookingListToday.innerHTML = sorted.length
         ? sorted
             .map((b) => {
-              const beds = (b.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+              const beds = (b.beds || []).map((i) => DeskI18n.bedLabelAt(i)).join('、');
               const end = BookingStore.offsetToTime(
                 BookingStore.timeToOffset(b.startTime) + (b.durationMinutes || 60)
               );
@@ -631,7 +635,7 @@
     }
     mPendingRequests.innerHTML = requests
       .map((c) => {
-        const beds = (c.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+        const beds = (c.beds || []).map((i) => DeskI18n.bedLabelAt(i)).join('、');
         return `<div class="item">
           <div class="title">待处理申请 · ${beds} · ${c.startTime}–${c.endTime}</div>
           <div class="meta">${c.openRequestNote || c.reason || ''}</div>
@@ -680,7 +684,7 @@
       .map((it) => {
         if (it.kind === 'booking') {
           const b = it.ref;
-          const beds = (b.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+          const beds = (b.beds || []).map((i) => DeskI18n.bedLabelAt(i)).join('、');
           const on = selectedBookingId === b.id ? ' is-on' : '';
           return `<button type="button" class="occ-card${on}" data-occ-booking="${b.id}">
             <div class="occ-kicker">${statusLabel(b.status)} · 预约</div>
@@ -691,7 +695,7 @@
           </button>`;
         }
         const c = it.ref;
-        const beds = (c.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+        const beds = (c.beds || []).map((i) => DeskI18n.bedLabelAt(i)).join('、');
         const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
         const on = selectedClosureId === c.id ? ' is-on' : '';
         return `<button type="button" class="occ-card${on}" data-occ-closure="${c.id}">
@@ -764,7 +768,7 @@
           : BookingStore.offsetToTime(startOff);
         cells += `<button type="button" class="${cls}" data-bed="${bed}" data-slot="${i}" title="${title}"></button>`;
       }
-      const label = STORE_CONFIG.bedLabels[bed] || `${bed + 1}`;
+      const label = DeskI18n.bedLabelAt(bed);
       const dayClosed = BookingStore.hasDayClosureForBed(date, bed);
       rows += `<div class="m-tl-row">
         <div class="m-tl-label-wrap">
@@ -855,7 +859,7 @@
           const endOff = Math.min(startOff + snap, BookingStore.businessSpanMinutes());
           openRangeSheet(bed, startOff, endOff, '已切换选区；可再点同格取消');
           if (mTimelineHint) {
-            mTimelineHint.textContent = `已选 ${STORE_CONFIG.bedLabels[bed]} ${BookingStore.offsetToTime(
+            mTimelineHint.textContent = `已选 ${DeskI18n.bedLabelAt(bed)} ${BookingStore.offsetToTime(
               startOff
             )} 起；再点当前选区取消`;
           }
@@ -886,7 +890,7 @@
         const endOff = Math.min(startOff + snap, BookingStore.businessSpanMinutes());
         openRangeSheet(bed, startOff, endOff, '已选半小时；按住可继续拖选，弹层会变淡');
         if (mTimelineHint) {
-          mTimelineHint.textContent = `已选 ${STORE_CONFIG.bedLabels[bed]} ${BookingStore.offsetToTime(
+          mTimelineHint.textContent = `已选 ${DeskI18n.bedLabelAt(bed)} ${BookingStore.offsetToTime(
             startOff
           )} 起；再点同格取消，或再点结束格扩选`;
         }
@@ -943,7 +947,7 @@
           fillFormFromClosure(closure);
           refresh();
           const names = (closure.beds || [])
-            .map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}`)
+            .map((i) => DeskI18n.bedLabelAt(i))
             .join('、');
           const kind = BookingStore.isDayScopeClosure(closure) ? '整日关' : '时段关';
           if (sideTitle) sideTitle.textContent = '关床编辑';
@@ -1017,7 +1021,7 @@
           endTimeEl.value = range.endTime;
           renderSideBeds(beds);
           setReason('临时关闭');
-          const names = beds.map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}`).join('、');
+          const names = beds.map((i) => DeskI18n.bedLabelAt(i)).join('、');
           const conflicts = BookingStore.findBookingConflictsForRange(
             currentDate(),
             range.startTime,
@@ -1055,7 +1059,7 @@
     listEl.innerHTML = closures.length
       ? closures
           .map((c) => {
-            const beds = (c.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+            const beds = (c.beds || []).map((i) => DeskI18n.bedLabelAt(i)).join('、');
             const kind = BookingStore.isDayScopeClosure(c) ? '整日关' : '时段关';
             const req =
               c.openRequestStatus === 'requested'
@@ -1410,14 +1414,21 @@
     closeSide();
     refresh();
   });
-  window.addEventListener('booking-store-changed', refresh);
-
-  // 当前时间线约每分钟刷新一次
-  setInterval(() => {
-    if (!isMobileMerchant() && dateInput.value === BookingStore.todayBusinessDate()) {
-      refresh();
+  window.addEventListener('booking-store-changed', softRefresh);
+  window.addEventListener('storage', (e) => {
+    if (!e.key) return;
+    if (e.key === STORE_CONFIG.storageKey || e.key === 'booking_platform_sync_ping') {
+      softRefresh();
     }
-  }, 60000);
+  });
+
+  function softRefresh() {
+    if (document.querySelector('.board.is-dragging, .board.is-editing-block')) return;
+    refresh();
+  }
+
+  // 5 秒自动刷新（含跨标签页 CS 改动）；拖选中跳过
+  setInterval(softRefresh, 5000);
 
   renderSideBeds([]);
   dateInput.value = BookingStore.todayBusinessDate();

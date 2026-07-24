@@ -10,6 +10,20 @@
     closure_request: '#0f766e',
   };
 
+  function bedLabel(i) {
+    if (global.DeskI18n && DeskI18n.bedLabelAt) return DeskI18n.bedLabelAt(i);
+    const raw = STORE_CONFIG.bedLabels && STORE_CONFIG.bedLabels[i];
+    if (raw == null) return `${i + 1}`;
+    if (typeof raw === 'string') return raw;
+    return raw.jp || raw.cn || raw.en || `${i + 1}`;
+  }
+
+  function tokyoNowHhmm() {
+    if (BookingStore.nowTokyoHhmm) return BookingStore.nowTokyoHhmm();
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
   function hourLabels() {
     const cfg = STORE_CONFIG;
     const labels = [];
@@ -240,10 +254,7 @@
       if (opts.showNowLine === false) return;
       try {
         if (dateStr !== BookingStore.todayBusinessDate()) return;
-        const now = new Date();
-        const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
-          now.getMinutes()
-        ).padStart(2, '0')}`;
+        const hhmm = tokyoNowHhmm();
         const off = BookingStore.timeToOffset(hhmm);
         if (off < 0 || off > span) return;
         const line = document.createElement('div');
@@ -260,7 +271,7 @@
       row.className = 'board-row';
       const label = document.createElement('div');
       label.className = 'board-label';
-      const name = cfg.bedLabels[bed] || `${bed + 1}号资源`;
+      const name = bedLabel(bed);
 
       if (opts.bedDayControls) {
         label.classList.add('has-day-controls');
@@ -639,10 +650,7 @@
     // 底部时间轴标签行（对齐当前时刻竖线）
     try {
       if (opts.showNowLine !== false && dateStr === BookingStore.todayBusinessDate()) {
-        const now = new Date();
-        const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(
-          now.getMinutes()
-        ).padStart(2, '0')}`;
+        const hhmm = tokyoNowHhmm();
         const off = BookingStore.timeToOffset(hhmm);
         if (off >= 0 && off <= span) {
           const nowAxis = document.createElement('div');
@@ -665,7 +673,7 @@
       legend.className = 'board-legend';
       legend.innerHTML = `
       <span><i class="lg booking"></i>已确认预约</span>
-      <span><i class="lg pending"></i>待客服确认（≥2人）</span>
+      <span><i class="lg pending"></i>待商家确认（≥2人）</span>
       <span><i class="lg hold"></i>仅预占（未建单）</span>
       <span><i class="lg closure"></i>商家关闭</span>
       <span><i class="lg selection"></i>${opts.selectionHint || '空档拖选 / 选中块可拖移与拉伸'}</span>
@@ -759,7 +767,7 @@
 
       ctx.fillStyle = '#2c2c2c';
       ctx.font = '13px sans-serif';
-      ctx.fillText(cfg.bedLabels[bed], 12, y + rowH / 2 + 4);
+      ctx.fillText(bedLabel(bed), 12, y + rowH / 2 + 4);
 
       items
         .filter((x) => x.bedIndex === bed)
@@ -779,7 +787,7 @@
     const ly = height - 22;
     const legs = [
       ['#9bb8d9', '已确认'],
-      ['#d97706', '待确认'],
+      ['#d97706', '待商家确认'],
       ['#7c3aed', '预占'],
       ['#6b7280', '商家关闭'],
       ['#0f766e', '开床申请'],
@@ -802,7 +810,7 @@
     const cfg = STORE_CONFIG;
     const course = cfg.courses.find((c) => c.id === booking.courseId);
     const channel = cfg.channels.find((c) => c.id === booking.channelId);
-    const beds = (booking.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+    const beds = (booking.beds || []).map((i) => bedLabel(i)).join('、');
     const end = BookingStore.offsetToTime(
       BookingStore.timeToOffset(booking.startTime) + booking.durationMinutes
     );
@@ -827,7 +835,7 @@
       `时长：${booking.durationMinutes} 分钟`,
       `人数：${booking.guests}`,
       `床位：${beds}`,
-      `项目：${course ? course.name : '-'}`,
+      `项目：${course ? (global.DeskI18n ? DeskI18n.courseLabel(course) : course.name) : '-'}`,
       `渠道：${channel ? channel.name : '-'}`,
       `客人：${booking.guestName || '-'}`,
       `电话：${booking.guestPhone || '-'}`,
@@ -843,7 +851,7 @@
 
   function buildOpenRequestEmail(closure) {
     const cfg = STORE_CONFIG;
-    const beds = (closure.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+    const beds = (closure.beds || []).map((i) => bedLabel(i)).join('、');
     const subject = `${cfg.emailSubjectPrefix}开床申请 ${closure.date} ${beds || ''}`;
     const body = [
       '【开床申请】',
@@ -877,14 +885,14 @@
       const end = BookingStore.offsetToTime(
         BookingStore.timeToOffset(b.startTime) + b.durationMinutes
       );
-      const beds = (b.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+      const beds = (b.beds || []).map((i) => bedLabel(i)).join('、');
       const course = (cfg.courses.find((c) => c.id === b.courseId) || {}).name || '-';
       return `· [${b.status}] ${b.startTime}–${end} ${beds} ${b.guests || 1}人 ${
         b.guestName || '未留名'
       } / ${course}`;
     });
     const closeLines = closures.map((c) => {
-      const beds = (c.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+      const beds = (c.beds || []).map((i) => bedLabel(i)).join('、');
       const tag = c.openRequestStatus === 'requested' ? '（开床申请中）' : '';
       return `· ${c.startTime}–${c.endTime} ${beds || '-'} ${c.reason || ''}${tag}`;
     });
@@ -932,8 +940,14 @@
   function buildCalendarDraft(booking, eventType) {
     const cfg = STORE_CONFIG;
     const course = cfg.courses.find((c) => c.id === booking.courseId);
-    const courseName = course ? course.name.split('/')[0].trim() : 'Service';
-    const beds = (booking.beds || []).map((i) => cfg.bedLabels[i]).join('、');
+    const courseName = course
+      ? String(
+          global.DeskI18n ? DeskI18n.courseLabel(course) : course.name || ''
+        )
+          .split('/')[0]
+          .trim()
+      : 'Service';
+    const beds = (booking.beds || []).map((i) => bedLabel(i)).join('、');
     const endTime = BookingStore.offsetToTime(
       BookingStore.timeToOffset(booking.startTime) + booking.durationMinutes
     );
@@ -959,7 +973,9 @@
       `Name: ${booking.guestName || '-'}`,
       `Time: ${formatUsShortDate(booking.date)}, ${booking.startTime}`,
       `Number of Guests: ${booking.guests || 1}`,
-      `Service: ${course ? course.name : '-'} ${booking.durationMinutes} min`,
+      `Service: ${
+        course ? (global.DeskI18n ? DeskI18n.courseLabel(course) : course.name) : '-'
+      } ${booking.durationMinutes} min`,
       `Contact (WhatsApp): ${booking.guestPhone || '-'}`,
       `Beds: ${beds || '-'}`,
       `Channel: ${(cfg.channels.find((c) => c.id === booking.channelId) || {}).name || '-'}`,

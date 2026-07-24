@@ -26,7 +26,7 @@
       boardHint:
         '左の「閉/開」＝終日閉 / 終日閉を解除。空欄をドラッグで時間帯クローズ（ドラッグ中はパネルが薄くなります）。同じ選択をもう一度タップで取消。茶線＝現在時刻。',
       legendBooking: '確定予約',
-      legendPending: '未確定',
+      legendPending: '商家確認待ち',
       legendHold: '仮押さえ',
       legendClosure: '店舗クローズ',
       legendOpenReq: 'オープン申請',
@@ -100,7 +100,9 @@
       sideNote: 'メモ',
       optional: '任意',
       notePh: 'アレルギー / 指名など',
-      multiHint: '2名以上は作成後「未確定」。確定後にメールプレビュー。',
+      multiHint: '2名以上は作成後「商家確認待ち」。確定後にメールプレビュー。',
+      statusPending: '商家確認待ち',
+      pendingStat: '商家確認待ち',
       openReqDetail: '店舗が当該ベッド時間帯をクローズ済み。CSは直接開けず、オープン申請のみ可能。',
       openReqNote: '申請メモ（任意）',
       openReqNotePh: '例：お客様指名 / 臨時追加',
@@ -150,7 +152,7 @@
       boardHint:
         '左侧「关/开」= 整日关闭 / 释放整日关。空档按住拖选关时段（拖动时弹层变淡）。再点已选同一资源可取消选择。棕线=当前时刻，下方浅色小字为时刻。',
       legendBooking: '已确认预约',
-      legendPending: '待确认',
+      legendPending: '待商家确认',
       legendHold: '预占',
       legendClosure: '商家关闭',
       legendOpenReq: '开床申请',
@@ -223,7 +225,9 @@
       sideNote: '备注',
       optional: '可选',
       notePh: '过敏/指定等',
-      multiHint: '≥2 人创建后为「待确认」，需再点确认才出邮件预览。',
+      multiHint: '≥2 人创建后为「待商家确认」，需再点确认才出邮件预览。',
+      statusPending: '待商家确认',
+      pendingStat: '待商家确认',
       openReqDetail: '商家已关闭该床位时段。客服不可直接开床，可发起开床申请。',
       openReqNote: '申请备注（可选）',
       openReqNotePh: '如：客人指定该床 / 临时加单',
@@ -272,7 +276,7 @@
       boardHint:
         'Left Close/Open = full-day close / release. Drag empty slots to close a range (panel fades while dragging). Tap the same selection again to cancel. Brown line = now.',
       legendBooking: 'Confirmed',
-      legendPending: 'Pending',
+      legendPending: 'Awaiting merchant confirm',
       legendHold: 'Hold',
       legendClosure: 'Merchant close',
       legendOpenReq: 'Open request',
@@ -345,7 +349,9 @@
       sideNote: 'Note',
       optional: 'Optional',
       notePh: 'Allergy / request…',
-      multiHint: '2+ guests stay Pending until confirmed; then email preview.',
+      multiHint: '2+ guests stay “awaiting merchant confirm” until confirmed; then email preview.',
+      statusPending: 'Awaiting merchant',
+      pendingStat: 'Awaiting merchant',
       openReqDetail: 'Merchant closed this bed/slot. CS cannot open directly — request open instead.',
       openReqNote: 'Request note (optional)',
       openReqNotePh: 'e.g. guest asked for this bed',
@@ -419,6 +425,43 @@
   function reasonLabel(stored) {
     const k = REASON_KEYS[stored];
     return k ? t(k) : stored || '';
+  }
+
+  function localizedText(value, fallback) {
+    if (value == null || value === '') return fallback || '';
+    if (typeof value === 'string') return value;
+    const lang = getLang();
+    return value[lang] || value.jp || value.cn || value.en || fallback || '';
+  }
+
+  function resourceLabel(raw, index) {
+    const fb = Number.isFinite(index) ? String(index + 1) : '';
+    return localizedText(raw, fb);
+  }
+
+  function bedLabelAt(index) {
+    const cfg = global.STORE_CONFIG || {};
+    const raw = (cfg.bedLabels || [])[index];
+    return resourceLabel(raw, index);
+  }
+
+  function courseLabel(course) {
+    if (!course) return '';
+    const lang = getLang();
+    let base = '';
+    if (course.names && typeof course.names === 'object') {
+      base = course.names[lang] || course.names.jp || course.names.cn || course.names.en || '';
+    } else if (course.name && typeof course.name === 'object') {
+      base = course.name[lang] || course.name.jp || course.name.cn || course.name.en || '';
+    } else {
+      base = String(course.name || '');
+    }
+    if (course.price != null && course.price !== '' && !String(base).includes('¥')) {
+      const n = Number(course.price);
+      const price = Number.isFinite(n) ? `¥${n.toLocaleString('en-US')}` : String(course.price);
+      base = base ? `${base} - ${price}` : price;
+    }
+    return base;
   }
 
   function storeName(cfg) {
@@ -501,6 +544,10 @@
     onChange,
     t,
     reasonLabel,
+    localizedText,
+    resourceLabel,
+    bedLabelAt,
+    courseLabel,
     storeName,
     applyDom,
     mountSwitch,

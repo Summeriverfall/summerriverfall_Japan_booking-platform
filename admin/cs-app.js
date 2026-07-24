@@ -16,7 +16,8 @@
   DeskI18n.onChange(() => {
     DeskI18n.applyDom();
     updateChrome();
-    refresh();
+    fillSelects();
+    softRefresh();
   });
 
   const defaultHour = String(
@@ -52,7 +53,7 @@
 
   function fillSelects() {
     document.getElementById('course').innerHTML = STORE_CONFIG.courses
-      .map((c) => `<option value="${c.id}">${c.name}</option>`)
+      .map((c) => `<option value="${c.id}">${escapeHtml(DeskI18n.courseLabel(c))}</option>`)
       .join('');
     document.getElementById('channel').innerHTML = STORE_CONFIG.channels
       .map((c) => `<option value="${c.id}">${c.name}</option>`)
@@ -77,10 +78,10 @@
     const set = new Set((selected || []).map(Number));
     sideBeds.innerHTML = STORE_CONFIG.bedLabels
       .map(
-        (name, i) =>
+        (raw, i) =>
           `<label class="bed-check-item"><input type="checkbox" value="${i}" ${
             set.has(i) ? 'checked' : ''
-          }><span class="bed-check-text">${name}</span></label>`
+          }><span class="bed-check-text">${escapeHtml(DeskI18n.bedLabelAt(i))}</span></label>`
       )
       .join('');
   }
@@ -303,9 +304,25 @@
   }
 
   function closeSide() {
-    sidePanel.classList.remove('is-open');
+    sidePanel.classList.remove('is-open', 'is-drag-hidden', 'is-drag-faded');
     sidePanel.setAttribute('aria-hidden', 'true');
     sidePanel.hidden = true;
+  }
+
+  function fadeSideDuringDrag() {
+    if (sidePanel.hidden) return;
+    sidePanel.classList.add('is-drag-faded');
+    sidePanel.classList.remove('is-drag-hidden');
+  }
+
+  function clearRangeSelection(msg) {
+    rangeSelection = null;
+    selectedBookingId = null;
+    selectedClosureId = null;
+    closeSide();
+    formErr.className = 'hint ok';
+    formErr.textContent = msg || '已取消选择';
+    refresh();
   }
 
   function formPayload(mode) {
@@ -629,7 +646,7 @@
     if (booking && booking.id) {
       BookingStore.appendEmailLog(booking.id, { eventType, mode: 'preview_only' });
     }
-    emailBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // 不自动滚到邮件区，避免时间表改动时页面下跳
   }
 
   async function syncDailyDigestToGateway() {
@@ -669,6 +686,12 @@
       selection: rangeSelection,
       selectedBookingId,
       selectedClosureId,
+      selectionHint: '空档拖选新建；再点当前选区取消；拖动时弹层变淡',
+      onDragStart: () => fadeSideDuringDrag(),
+      onDragEnd: () => {
+        sidePanel.classList.remove('is-drag-faded');
+      },
+      onCancelSelection: () => clearRangeSelection('已取消选择'),
       onClearBookingSelect: () => {
         if (selectedBookingId) selectedBookingId = null;
       },
@@ -733,7 +756,7 @@
           endOffset: BookingStore.timeToOffset(closure.endTime),
         };
         const names = (closure.beds || [])
-          .map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}号床`)
+          .map((i) => DeskI18n.bedLabelAt(i))
           .join('、');
         const detail = document.getElementById('openReqDetail');
         if (detail) {
@@ -768,7 +791,7 @@
         document.getElementById('guests').value = String(range.guests || beds.length);
         document.getElementById('channel').value = 'whatsapp';
         renderSideBeds(beds);
-        const names = beds.map((i) => STORE_CONFIG.bedLabels[i] || `${i + 1}号床`).join('、');
+        const names = beds.map((i) => DeskI18n.bedLabelAt(i)).join('、');
         openSide(
           `已选 ${names} · ${range.startTime}–${range.endTime}（${range.durationMinutes} 分 · ${beds.length} 人）`,
           { x: range.clientX, y: range.clientY }
@@ -801,7 +824,7 @@
             const end = BookingStore.offsetToTime(
               BookingStore.timeToOffset(b.startTime) + b.durationMinutes
             );
-            const beds = (b.beds || []).map((i) => STORE_CONFIG.bedLabels[i]).join('、');
+            const beds = (b.beds || []).map((i) => DeskI18n.bedLabelAt(i)).join('、');
             return `
           <div class="item" data-id="${b.id}">
             <div class="title">
@@ -842,7 +865,7 @@
 
   function statusLabel(s) {
     if (s === 'confirmed') return '已确认';
-    if (s === 'pending_confirm') return '待确认';
+    if (s === 'pending_confirm') return DeskI18n.t('statusPending');
     if (s === 'hold') return '仅预占';
     if (s === 'cancelled') return '已取消';
     return s;
@@ -901,7 +924,7 @@
     }
     if (result.needConfirm) {
       formErr.className = 'hint warn';
-      formErr.textContent = '已创建，状态待确认。请在订单列表点人工确认。';
+      formErr.textContent = '已创建，状态待商家确认。请在订单列表点人工确认。';
       closeSide();
     } else {
       formErr.className = 'hint ok';
@@ -1111,10 +1134,32 @@
     emailBox.innerHTML = '<div class="hint">已清空。</div>';
   });
 
-  window.addEventListener('booking-store-changed', refresh);
+  window.addEventListener('booking-store-changed', softRefresh);
+  window.addEventListener('storage', (e) => {
+    if (!e.key) return;
+    if (e.key === STORE_CONFIG.storageKey || e.key === 'booking_platform_sync_ping') {
+      softRefresh();
+    }
+  });
+
+  function softRefresh() {
+    if (document.querySelector('.board.is-dragging, .board.is-editing-block')) return;
+    refresh();
+  }
+
+  setInterval(softRefresh, 5000);
 
   fillSelects();
   renderSideBeds([0]);
   dateInput.value = BookingStore.todayBusinessDate();
+  const courseEl = document.getElementById('course');
+  if (courseEl) {
+    courseEl.addEventListener('change', () => {
+      const c = (STORE_CONFIG.courses || []).find((x) => x.id === courseEl.value);
+      if (c && c.durationMinutes) {
+        document.getElementById('duration').value = String(c.durationMinutes);
+      }
+    });
+  }
   refresh();
 })();

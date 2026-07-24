@@ -22,7 +22,13 @@
       hoursLabel: '11:00 – 21:30',
       slotMinutes: 30,
       bedCount: 5,
-      bedLabels: ['オイルルーム①', 'オイルルーム②', 'もみほぐし室', 'VIP包間', 'ペアルーム'],
+      bedLabels: [
+        { jp: 'オイルルーム①', cn: '精油房①', en: 'Oil room 1' },
+        { jp: 'オイルルーム②', cn: '精油房②', en: 'Oil room 2' },
+        { jp: 'もみほぐし室', cn: '推拿室', en: 'Massage room' },
+        { jp: 'VIP包間', cn: 'VIP包间', en: 'VIP room' },
+        { jp: 'ペアルーム', cn: '双人房', en: 'Pair room' },
+      ],
       confirmGuestsThreshold: 2,
       courses: [
         { id: 'oil-60', name: 'オイルトリートメント 60分 / 精油护理 60分钟' },
@@ -81,7 +87,13 @@
       hoursLabel: '12:00 – 次日 02:00',
       slotMinutes: 30,
       bedCount: 5,
-      bedLabels: ['スパルームA', 'スパルームB', 'リラクスルーム', 'VIPスイート', 'ミッドナイトルーム'],
+      bedLabels: [
+        { jp: 'スパルームA', cn: '水疗室A', en: 'Spa room A' },
+        { jp: 'スパルームB', cn: '水疗室B', en: 'Spa room B' },
+        { jp: 'リラクスルーム', cn: '放松室', en: 'Relax room' },
+        { jp: 'VIPスイート', cn: 'VIP套房', en: 'VIP suite' },
+        { jp: 'ミッドナイトルーム', cn: '深夜房', en: 'Midnight room' },
+      ],
       confirmGuestsThreshold: 2,
       courses: [
         { id: 'body-60', name: 'ボディマッサージ 60分 / 身体按摩 60分钟' },
@@ -143,25 +155,31 @@
       hoursLabel: '11:00 – 24:00',
       slotMinutes: 30,
       bedCount: 5,
-      bedLabels: ['アロマ包間', 'ボディルーム', 'フットケア室', 'ヘッドスパ室', 'VIP包房'],
+      bedLabels: [
+        { jp: 'アロマ包間', cn: '芳香包间', en: 'Aroma private room' },
+        { jp: 'ボディルーム', cn: '身体护理室', en: 'Body room' },
+        { jp: 'フットケア室', cn: '足部护理室', en: 'Foot care room' },
+        { jp: 'ヘッドスパ室', cn: '头部水疗室', en: 'Head spa room' },
+        { jp: 'VIP包房', cn: 'VIP包房', en: 'VIP suite' },
+      ],
       confirmGuestsThreshold: 2,
+      /** 对照 d:/Work/Project/luna 官网价目校准 */
       courses: [
-        { id: 'aroma-lux', name: '芳香奢华 - ¥24,800' },
-        { id: 'aroma-prem', name: '芳香尊享 - ¥20,800' },
-        { id: 'body-head', name: '身体·头部 - ¥13,800' },
-        { id: 'body-foot', name: '身体·足部 - ¥13,800' },
-        { id: 'aroma-head', name: '芳香·头部 - ¥16,800' },
-        { id: 'aroma-foot', name: '芳香·足部 - ¥16,800' },
-        { id: 'momi-60', name: '按摩 60分钟 - ¥8,800' },
-        { id: 'momi-90', name: '按摩 90分钟 - ¥12,800' },
-        { id: 'momi-120', name: '按摩 120分钟 - ¥16,800' },
-        { id: 'oil-60', name: '芳香精油疗法 60分钟 - ¥11,800' },
-        { id: 'oil-90', name: '芳香精油疗法 90分钟 - ¥15,800' },
-        { id: 'oil-120', name: '芳香精油疗法 120分钟 - ¥19,800' },
-        { id: 'head-30', name: '头部水疗 30分钟 - ¥5,800' },
-        { id: 'head-45', name: '头部水疗 45分钟 - ¥7,800' },
-        { id: 'foot-30', name: '足部护理 30分钟 - ¥5,800' },
-        { id: 'foot-45', name: '足部护理 45分钟 - ¥7,800' },
+        { id: 'foot-30', durationMinutes: 30, price: 4800, name: { jp: '足リフレクソロジー 30分', cn: '足部反射疗法 30分钟', en: 'Foot Reflexology 30 min' } },
+        { id: 'foot-45', durationMinutes: 45, price: 5800, name: { jp: '足リフレクソロジー 45分', cn: '足部反射疗法 45分钟', en: 'Foot Reflexology 45 min' } },
+        { id: 'body-60', durationMinutes: 60, price: 7800, name: { jp: '全身もみほぐし 60分', cn: '全身按摩 60分钟', en: 'Full Body Massage 60 min' } },
+        { id: 'body-90', durationMinutes: 90, price: 11800, name: { jp: '全身もみほぐし 90分', cn: '全身按摩 90分钟', en: 'Full Body Massage 90 min' } },
+        { id: 'body-120', durationMinutes: 120, price: 14800, name: { jp: '全身もみほぐし 120分', cn: '全身按摩 120分钟', en: 'Full Body Massage 120 min' } },
+        { id: 'body-150', durationMinutes: 150, price: 17800, name: { jp: '全身もみほぐし 150分', cn: '全身按摩 150分钟', en: 'Full Body Massage 150 min' } },
+        { id: 'lymph-60', durationMinutes: 60, price: 10800, name: { jp: '全身リンパトリートメント 60分', cn: '全身精油淋巴疗法 60分钟', en: 'Full-Body Essential Oil Lymphatic Therapy 60 min' } },
+        { id: 'lymph-90', durationMinutes: 90, price: 13800, name: { jp: '全身リンパトリートメント 90分', cn: '全身精油淋巴疗法 90分钟', en: 'Full-Body Essential Oil Lymphatic Therapy 90 min' } },
+        { id: 'lymph-120', durationMinutes: 120, price: 16800, name: { jp: '全身リンパトリートメント 120分', cn: '全身精油淋巴疗法 120分钟', en: 'Full-Body Essential Oil Lymphatic Therapy 120 min' } },
+        { id: 'lymph-150', durationMinutes: 150, price: 19800, name: { jp: '全身リンパトリートメント 150分', cn: '全身精油淋巴疗法 150分钟', en: 'Full-Body Essential Oil Lymphatic Therapy 150 min' } },
+        { id: 'head-45', durationMinutes: 45, price: 6800, name: { jp: 'ドライヘッドスパ 45分', cn: '头部放松项目 45分钟', en: 'Dry Head Spa 45 min' } },
+        { id: 'head-60', durationMinutes: 60, price: 7800, name: { jp: 'ドライヘッドスパ 60分', cn: '头部放松项目 60分钟', en: 'Dry Head Spa 60 min' } },
+        { id: 'leg-60', durationMinutes: 60, price: 10800, name: { jp: '足集中ケア 60分', cn: '足部集中护理 60分钟', en: 'Focused Leg Care 60 min' } },
+        { id: 'recovery1', durationMinutes: 120, price: 16300, name: { jp: '疲労回復コース① 120分', cn: '疲劳恢复课程1 120分钟', en: 'Fatigue Recovery Course 1 120 min' } },
+        { id: 'recovery2', durationMinutes: 120, price: 18300, name: { jp: '疲労回復コース② 120分', cn: '疲劳恢复课程2 120分钟', en: 'Fatigue Recovery Course 2 120 min' } },
       ],
       channels: [
         { id: 'whatsapp', name: 'WhatsApp' },
@@ -226,16 +244,26 @@
     labels = labels.slice(0, count).map((name, i) => name || `资源${i + 1}`);
 
     let courses = Array.isArray(next.courses) ? next.courses : prev.courses;
+    // 覆盖保存时保留多语 name / 时长 / 价格
     if (Array.isArray(courses)) {
       courses = courses
         .map((c, i) => {
-          const name = String((c && c.name) || '').trim();
-          if (!name) return null;
+          if (!c) return null;
           const id =
             String((c && c.id) || '')
               .trim()
               .replace(/\s+/g, '-') || `course-${i + 1}`;
-          return { id, name };
+          const out = { id };
+          if (c.name && typeof c.name === 'object') {
+            out.name = Object.assign({}, c.name);
+          } else {
+            const name = String((c && c.name) || '').trim();
+            if (!name) return null;
+            out.name = name;
+          }
+          if (c.durationMinutes != null) out.durationMinutes = Number(c.durationMinutes) || undefined;
+          if (c.price != null) out.price = Number(c.price) || c.price;
+          return out;
         })
         .filter(Boolean);
     }

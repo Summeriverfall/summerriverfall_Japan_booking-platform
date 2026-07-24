@@ -51,8 +51,11 @@
   };
 
   function resourceLabel(i) {
+    if (window.DeskI18n && DeskI18n.bedLabelAt) return DeskI18n.bedLabelAt(i);
     const labels = cfg.bedLabels || [];
-    return labels[i] || `R${i + 1}`;
+    const raw = labels[i];
+    if (raw && typeof raw === 'object') return raw.jp || raw.cn || raw.en || `R${i + 1}`;
+    return raw || `R${i + 1}`;
   }
 
   function addMinutes(hhmm, minutes) {

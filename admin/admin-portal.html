@@ -101,9 +101,17 @@
       const stores = StoreRegistry.listStores();
       grid.innerHTML = stores
         .map((s) => {
-          const labels = (s.bedLabels || []).map((name, i) =>
-            `<input type="text" data-label-i="${i}" value="${escapeHtml(name)}" ${editing ? '' : 'readonly'}>`
-          ).join('');
+          const labels = (s.bedLabels || [])
+            .map((name, i) => {
+              const text =
+                typeof name === 'object'
+                  ? name.jp || name.cn || name.en || `R${i + 1}`
+                  : name;
+              return `<input type="text" data-label-i="${i}" value="${escapeHtml(text)}" ${
+                editing ? '' : 'readonly'
+              }>`;
+            })
+            .join('');
           return `
           <div class="store-card ${editing ? 'is-editing' : ''}" data-store="${escapeHtml(s.storeId)}" style="--accent:${s.accent}">
             <a class="store-card-link" href="cs.html?store=${encodeURIComponent(s.storeId)}" ${editing ? 'onclick="return false"' : ''} style="text-decoration:none;color:inherit;display:block">
@@ -128,7 +136,13 @@
               <label>${escapeHtml(DeskI18n.t('coursesLabel'))}</label>
               <textarea data-courses rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .55rem;font:inherit;line-height:1.45">${escapeHtml(
                 (s.courses || [])
-                  .map((c) => (c.id ? `${c.id}|${c.name}` : c.name))
+                  .map((c) => {
+                    const label =
+                      typeof c.name === 'object'
+                        ? c.name.jp || c.name.cn || c.name.en || ''
+                        : c.name;
+                    return c.id ? `${c.id}|${label}` : label;
+                  })
                   .join('\n')
               )}</textarea>
               <div class="res-actions">

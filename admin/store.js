@@ -1,20 +1,88 @@
 /**
- * 统一占用账本（首期）：预约 / 待确认预留 / 商家手动关床
+ * 统一占用账本（首期）：预约 / 待商家确认预留 / 商家手动关床
  * 数据存 localStorage，便于本机功能测试；后续可换服务端。
+ * 营业日与「当前时刻」一律按日本时间 Asia/Tokyo。
  */
 (function (global) {
   const CFG = () => global.STORE_CONFIG;
+  const TZ = 'Asia/Tokyo';
+
+  function bedName(i) {
+    const raw = CFG().bedLabels && CFG().bedLabels[i];
+    if (raw == null || raw === '') return `${Number(i) + 1}`;
+    if (typeof raw === 'string') return raw;
+    if (global.DeskI18n && DeskI18n.resourceLabel) {
+      return DeskI18n.resourceLabel(raw, Number(i));
+    }
+    return raw.jp || raw.cn || raw.en || `${Number(i) + 1}`;
+  }
+
+  function resolveCourseName(courseOrId) {
+    const c =
+      typeof courseOrId === 'object' && courseOrId
+        ? courseOrId
+        : (CFG().courses || []).find((x) => x.id === courseOrId);
+    if (!c) return '';
+    if (global.DeskI18n && DeskI18n.courseLabel) return DeskI18n.courseLabel(c);
+    if (c.name && typeof c.name === 'object') {
+      return c.name.jp || c.name.cn || c.name.en || c.id;
+    }
+    return String(c.name || c.id || '');
+  }
+
+  function tokyoParts(date) {
+    const d = date || new Date();
+    const parts = {};
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: TZ,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+      .formatToParts(d)
+      .forEach((p) => {
+        if (p.type !== 'literal') parts[p.type] = p.value;
+      });
+    let hour = Number(parts.hour);
+    if (hour === 24) hour = 0;
+    return {
+      year: Number(parts.year),
+      month: Number(parts.month),
+      day: Number(parts.day),
+      hour,
+      minute: Number(parts.minute),
+      second: Number(parts.second),
+    };
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function formatTokyoDate(parts) {
+    return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+  }
+
+  /** 日本时间的当前 HH:MM */
+  function nowTokyoHhmm() {
+    const t = tokyoParts();
+    return `${pad2(t.hour)}:${pad2(t.minute)}`;
+  }
 
   function todayBusinessDate() {
-    const now = new Date();
+    const t = tokyoParts();
     const cfg = CFG();
-    // 跨夜店：凌晨仍算前一营业日
-    if (cfg.overnight && now.getHours() < cfg.closeHour) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 1);
-      return formatDate(d);
+    // 跨夜店：日本时间凌晨仍算前一营业日
+    if (cfg && cfg.overnight && t.hour < (cfg.closeHour || 0)) {
+      const utc = new Date(Date.UTC(t.year, t.month - 1, t.day));
+      utc.setUTCDate(utc.getUTCDate() - 1);
+      return `${utc.getUTCFullYear()}-${pad2(utc.getUTCMonth() + 1)}-${pad2(utc.getUTCDate())}`;
     }
-    return formatDate(now);
+    return formatTokyoDate(t);
   }
 
   function formatDate(d) {
@@ -83,6 +151,16 @@
   function save(state) {
     state.meta.updatedAt = new Date().toISOString();
     localStorage.setItem(CFG().storageKey, JSON.stringify(state));
+    try {
+      localStorage.setItem(
+        'booking_platform_sync_ping',
+        JSON.stringify({
+          key: CFG().storageKey,
+          storeId: CFG().storeId,
+          at: Date.now(),
+        })
+      );
+    } catch (e) {}
     global.dispatchEvent(new CustomEvent('booking-store-changed', { detail: state }));
     return state;
   }
@@ -208,7 +286,7 @@
     if (!conflicts || !conflicts.length) return '';
     const lines = conflicts.slice(0, 5).map((c) => {
       const beds = (c.beds || [])
-        .map((i) => CFG().bedLabels[i] || `${i + 1}号床`)
+        .map((i) => bedName(i))
         .join('、');
       const name = c.booking.guestName || '未留名';
       return `· ${beds} ${c.startTime}–${c.endTime}（${name}）`;
@@ -236,7 +314,7 @@
       if (blocked.length) {
         return {
           ok: false,
-          error: `所选床位已被占用：${blocked.map((i) => CFG().bedLabels[i] || i + 1).join('、')}`,
+          error: `所选床位已被占用：${blocked.map((i) => bedName(i)).join('、')}`,
         };
       }
     } else {
@@ -267,8 +345,7 @@
       courseId: input.courseId || '',
       courseName: (() => {
         if (input.courseName) return String(input.courseName);
-        const c = (CFG().courses || []).find((x) => x.id === input.courseId);
-        return (c && c.name) || '';
+        return resolveCourseName(input.courseId);
       })(),
       channelId: input.channelId || 'whatsapp',
       guestName: input.guestName || '',
@@ -391,7 +468,7 @@
     if (blocked.length) {
       return {
         ok: false,
-        error: `目标位置冲突：${blocked.map((i) => CFG().bedLabels[i] || i + 1).join('、')}`,
+        error: `目标位置冲突：${blocked.map((i) => bedName(i)).join('、')}`,
       };
     }
 
@@ -493,7 +570,7 @@
   function closeDayBed(dateStr, bedIndex, meta) {
     const bed = Number(bedIndex);
     if (hasDayClosureForBed(dateStr, bed)) {
-      const name = (CFG().bedLabels && CFG().bedLabels[bed]) || `${bed + 1}`;
+      const name = bedName(bed);
       return {
         ok: false,
         error: `「${name}」已整日关闭，不能重复关闭。请先点左侧「开」释放后再关。`,
@@ -539,7 +616,7 @@
       const already = beds.filter((b) => hasDayClosureForBed(input.date, b));
       if (already.length) {
         const names = already
-          .map((i) => (CFG().bedLabels && CFG().bedLabels[i]) || `${i + 1}`)
+          .map((i) => bedName(i))
           .join('、');
         return {
           ok: false,
@@ -576,7 +653,7 @@
       const names = conflicts
         .map((c) => {
           const bedsLabel = (c.beds || [])
-            .map((i) => (CFG().bedLabels && CFG().bedLabels[i]) || `${i + 1}`)
+            .map((i) => bedName(i))
             .join('、');
           const kind = isDayScopeClosure(c) ? '整日关' : '时段关';
           return `${kind} ${bedsLabel} ${c.startTime}–${c.endTime}`;
@@ -755,6 +832,8 @@
 
   global.BookingStore = {
     todayBusinessDate,
+    nowTokyoHhmm,
+    tokyoParts,
     formatDate,
     parseDate,
     timeToOffset,
