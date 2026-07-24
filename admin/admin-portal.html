@@ -84,8 +84,8 @@
     <div class="store-grid" id="storeGrid"></div>
   </main>
 
-  <script src="stores.js?v=20260724-rt1"></script>
-  <script src="desk-i18n.js?v=20260724-rt1"></script>
+  <script src="stores.js?v=20260724-rt2"></script>
+  <script src="desk-i18n.js?v=20260724-rt2"></script>
   <script>
     StoreRegistry.setRole('admin');
     const grid = document.getElementById('storeGrid');
@@ -123,27 +123,16 @@
 
     function resourceTypeSelectHtml(currentLabel, index, canEdit) {
       const types = StoreRegistry.listResourceTypes();
-      const selectedId = StoreRegistry.matchResourceTypeId(currentLabel);
+      const selectedId = StoreRegistry.matchResourceTypeId(currentLabel) || (types[0] && types[0].id) || '';
       const opts = types
         .map((t) => {
           const sel = t.id === selectedId ? ' selected' : '';
           return `<option value="${escapeHtml(t.id)}"${sel}>${escapeHtml(typeOptionLabel(t))}</option>`;
         })
         .join('');
-      // 若当前值不在类型表中，仍展示当前文案并保留
-      let extra = '';
-      if (!selectedId && currentLabel) {
-        const text =
-          typeof currentLabel === 'object'
-            ? currentLabel.jp || currentLabel.cn || currentLabel.en || ''
-            : String(currentLabel);
-        if (text) {
-          extra = `<option value="${escapeHtml(text)}" selected>${escapeHtml(text)} （当前）</option>`;
-        }
-      }
       return `<select class="res-type-select" data-label-i="${index}" ${
         canEdit ? '' : 'disabled'
-      }>${extra}${opts}</select>`;
+      }>${opts}</select>`;
     }
 
     function render() {
@@ -225,8 +214,8 @@
           const bedLabels = [...card.querySelectorAll('[data-labels] select')].map((el) => {
             const t = StoreRegistry.findResourceTypeById(el.value);
             return t
-              ? { jp: t.jp, cn: t.cn, en: t.en }
-              : StoreRegistry.normalizeBedLabel(el.value, 0);
+              ? { typeId: t.id, jp: t.jp, cn: t.cn, en: t.en }
+              : Object.assign({ typeId: el.value }, StoreRegistry.normalizeBedLabel(el.value, 0));
           });
           const courses = String(card.querySelector('[data-courses]').value || '')
             .split(/\n+/)

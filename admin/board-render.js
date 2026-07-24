@@ -129,12 +129,17 @@
     function paintBedsRange(bedA, bedB, startOff, endOff) {
       const b0 = Math.min(bedA, bedB);
       const b1 = Math.max(bedA, bedB);
+      let bedIndexes = Array.from({ length: b1 - b0 + 1 }, (_, i) => b0 + i);
+      if (global.StoreRegistry && typeof StoreRegistry.expandBedIndexes === 'function') {
+        bedIndexes = StoreRegistry.expandBedIndexes(cfg, bedIndexes);
+      }
+      const bedSet = new Set(bedIndexes);
       let range = null;
       wrap.querySelectorAll('.board-track').forEach((t) => {
         const bed = Number(t.dataset.bed);
         const sel = t.querySelector('.board-selection');
         if (!sel) return;
-        if (bed >= b0 && bed <= b1) {
+        if (bedSet.has(bed)) {
           range = paintSelection(sel, startOff, endOff);
         } else {
           sel.hidden = true;
@@ -143,7 +148,7 @@
       if (range) applyHourHeaderHighlight(range.start, range.end);
       return {
         range,
-        bedIndexes: Array.from({ length: b1 - b0 + 1 }, (_, i) => b0 + i),
+        bedIndexes,
       };
     }
 

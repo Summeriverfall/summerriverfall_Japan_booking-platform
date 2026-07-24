@@ -391,8 +391,12 @@
   }
 
   function closeDayBed(bedIndex) {
-    const name = DeskI18n.bedLabelAt(bedIndex);
-    if (BookingStore.hasDayClosureForBed(currentDate(), bedIndex)) {
+    const beds =
+      window.StoreRegistry && StoreRegistry.expandBedIndexes
+        ? StoreRegistry.expandBedIndexes(STORE_CONFIG, [bedIndex])
+        : [bedIndex];
+    const name = beds.map((i) => DeskI18n.bedLabelAt(i)).join('、');
+    if (beds.some((b) => BookingStore.hasDayClosureForBed(currentDate(), b))) {
       formErr.className = 'err';
       formErr.textContent = `「${name}」已整日关闭，不能重复关闭。请先点「开」释放。`;
       return;
@@ -403,13 +407,13 @@
       currentDate(),
       startTime,
       endTime,
-      [bedIndex]
+      beds
     ).filter((c) => !BookingStore.isDayScopeClosure(c));
     const tip = slotOverlaps.length
       ? `将「${name}」整天关闭（营业时段 ${STORE_CONFIG.hoursLabel}）？\n该资源上已有 ${slotOverlaps.length} 条时段关闭，将被整日关覆盖。`
       : `将「${name}」整天关闭（营业时段 ${STORE_CONFIG.hoursLabel}）？`;
     if (!confirm(tip)) return;
-    if (!confirmIfBookingConflict(currentDate(), startTime, endTime, [bedIndex])) return;
+    if (!confirmIfBookingConflict(currentDate(), startTime, endTime, beds)) return;
     const reason = syncReasonFromUi();
     const r = BookingStore.closeDayBed(currentDate(), bedIndex, {
       reason: reason.reason || '临时关闭',
@@ -425,14 +429,18 @@
     mobilePickStart = null;
     formErr.className = 'hint ok';
     formErr.textContent = slotOverlaps.length
-      ? `已整日关闭 ${name}（已覆盖原时段关闭）。点「开」可释放整日关。`
+      ? `已整日关闭 ${name}（已覆盖原时段关闭）。点「开」可释放。`
       : `已整日关闭 ${name}。点左侧「开」可单独释放整日关。`;
     closeSide();
     refresh();
   }
 
   function openDayBedRow(bedIndex) {
-    const name = DeskI18n.bedLabelAt(bedIndex);
+    const beds =
+      window.StoreRegistry && StoreRegistry.expandBedIndexes
+        ? StoreRegistry.expandBedIndexes(STORE_CONFIG, [bedIndex])
+        : [bedIndex];
+    const name = beds.map((i) => DeskI18n.bedLabelAt(i)).join('、');
     const r = BookingStore.openDayBed(currentDate(), bedIndex);
     if (!r.ok) {
       formErr.className = 'err';
@@ -460,6 +468,13 @@
     return Math.round(Number(mins) / snap) * snap;
   }
 
+  function expandBedsLocal(indexes) {
+    if (window.StoreRegistry && typeof StoreRegistry.expandBedIndexes === 'function') {
+      return StoreRegistry.expandBedIndexes(STORE_CONFIG, indexes || []);
+    }
+    return (indexes || []).slice();
+  }
+
   function openRangeSheet(bedIndex, startOffset, endOffset, msg) {
     selectedClosureId = null;
     selectedBookingId = null;
@@ -471,19 +486,21 @@
     if (!(end > start)) end = start + snap;
     const span = BookingStore.businessSpanMinutes();
     if (end > span) end = span;
+    const beds = expandBedsLocal([bedIndex]);
     rangeSelection = {
-      bedIndex,
-      bedIndexes: [bedIndex],
+      bedIndex: beds[0],
+      bedIndexes: beds,
       startOffset: start,
       endOffset: end,
     };
     startTimeEl.value = BookingStore.offsetToTime(start);
     endTimeEl.value = BookingStore.offsetToTime(end);
     setReason('临时关闭');
-    renderSideBeds([bedIndex]);
+    renderSideBeds(beds);
     if (sideTitle) sideTitle.textContent = '关时段';
     setDockOn('range');
-    openSide(msg || `${DeskI18n.bedLabelAt(bedIndex)} · 请确认后关闭`, {
+    const names = beds.map((i) => DeskI18n.bedLabelAt(i)).join('、');
+    openSide(msg || `${names} · 请确认后关闭`, {
       x: window.innerWidth / 2,
       y: window.innerHeight - 80,
     });

@@ -155,12 +155,13 @@
       hoursLabel: '11:00 – 24:00',
       slotMinutes: 30,
       bedCount: 5,
+      /** 3 间单人房 + 1 间双人房（双人房占时间表连续两行） */
       bedLabels: [
-        { jp: 'アロマ包間', cn: '芳香包间', en: 'Aroma private room' },
-        { jp: 'ボディルーム', cn: '身体护理室', en: 'Body room' },
-        { jp: 'フットケア室', cn: '足部护理室', en: 'Foot care room' },
-        { jp: 'ヘッドスパ室', cn: '头部水疗室', en: 'Head spa room' },
-        { jp: 'VIP包房', cn: 'VIP包房', en: 'VIP suite' },
+        { typeId: 'single', jp: 'シングル①', cn: '单人房①', en: 'Single 1' },
+        { typeId: 'single', jp: 'シングル②', cn: '单人房②', en: 'Single 2' },
+        { typeId: 'single', jp: 'シングル③', cn: '单人房③', en: 'Single 3' },
+        { typeId: 'pair', pairGroup: 'luna-pair', jp: 'ペアルーム', cn: '双人房', en: 'Pair room' },
+        { typeId: 'pair', pairGroup: 'luna-pair', jp: 'ペアルーム', cn: '双人房', en: 'Pair room' },
       ],
       confirmGuestsThreshold: 2,
       /** 对照 d:/Work/Project/luna 官网价目校准 */
@@ -228,73 +229,112 @@
     return all[storeId] || null;
   }
 
-  function normalizeBedLabel(raw, index) {
-    if (raw && typeof raw === 'object') {
-      const jp = String(raw.jp || raw.cn || raw.en || '').trim();
-      if (!jp && !raw.cn && !raw.en) {
-        return { jp: `资源${(index || 0) + 1}`, cn: `资源${(index || 0) + 1}`, en: `Resource ${(index || 0) + 1}` };
-      }
-      return {
-        jp: String(raw.jp || jp).trim(),
-        cn: String(raw.cn || raw.jp || jp).trim(),
-        en: String(raw.en || raw.jp || jp).trim(),
-      };
-    }
-    const s = String(raw || '').trim();
-    if (!s) {
-      return { jp: `资源${(index || 0) + 1}`, cn: `资源${(index || 0) + 1}`, en: `Resource ${(index || 0) + 1}` };
-    }
-    // 若是类型 id，解析为完整三语文案
-    const fromCat = findResourceTypeById(s) || findResourceTypeByJp(s);
-    if (fromCat) return { jp: fromCat.jp, cn: fromCat.cn, en: fromCat.en };
-    return { jp: s, cn: s, en: s };
-  }
+  const RESOURCE_TYPES = [
+    { id: 'single', jp: 'シングルルーム', cn: '单人房', en: 'Single room' },
+    { id: 'pair', jp: 'ペアルーム', cn: '双人房', en: 'Double room' },
+    { id: 'vip', jp: 'VIP個室', cn: 'VIP包间', en: 'VIP private room' },
+  ];
 
-  /** 各店出现过的资源类型（去重，按日文名） */
   function listResourceTypes() {
-    const map = new Map();
-    STORES.forEach((store) => {
-      (store.bedLabels || []).forEach((lab) => {
-        let jp = '';
-        let cn = '';
-        let en = '';
-        if (lab && typeof lab === 'object') {
-          jp = String(lab.jp || lab.cn || lab.en || '').trim();
-          cn = String(lab.cn || lab.jp || jp).trim();
-          en = String(lab.en || lab.jp || jp).trim();
-        } else {
-          jp = String(lab || '').trim();
-          cn = jp;
-          en = jp;
-        }
-        if (!jp || map.has(jp)) return;
-        const id =
-          'rt-' +
-          (
-            jp
-              .replace(/\s+/g, '-')
-              .replace(/[^\w\u3040-\u30ff\u4e00-\u9fff\-]/g, '')
-              .slice(0, 40) || `type-${map.size + 1}`
-          );
-        map.set(jp, { id, jp, cn, en });
-      });
-    });
-    return Array.from(map.values());
+    return RESOURCE_TYPES.map((t) => ({ ...t }));
   }
 
   function findResourceTypeById(id) {
-    return listResourceTypes().find((t) => t.id === id) || null;
+    return RESOURCE_TYPES.find((t) => t.id === id) || null;
   }
 
   function findResourceTypeByJp(jp) {
     const s = String(jp || '').trim();
-    return listResourceTypes().find((t) => t.jp === s || t.cn === s || t.en === s) || null;
+    if (!s) return null;
+    const exact = RESOURCE_TYPES.find((t) => t.jp === s || t.cn === s || t.en === s);
+    if (exact) return exact;
+    if (/VIP|包间|個室/i.test(s)) return findResourceTypeById('vip');
+    if (/ペア|双人|Double|Pair/i.test(s)) return findResourceTypeById('pair');
+    if (/シングル|单人|Single/i.test(s)) return findResourceTypeById('single');
+    return RESOURCE_TYPES.find((t) => s.includes(t.cn) || s.includes(t.jp)) || null;
+  }
+
+  function normalizeBedLabel(raw, index) {
+    if (raw && typeof raw === 'object') {
+      const typeId = String(raw.typeId || '').trim();
+      const pairGroup = String(raw.pairGroup || '').trim();
+      const fromType = typeId ? findResourceTypeById(typeId) : null;
+      const jp = String(raw.jp || (fromType && fromType.jp) || raw.cn || raw.en || '').trim();
+      const cn = String(raw.cn || (fromType && fromType.cn) || raw.jp || jp).trim();
+      const en = String(raw.en || (fromType && fromType.en) || raw.jp || jp).trim();
+      if (!jp && !cn && !en) {
+        const fallback = `R${(index || 0) + 1}`;
+        return { jp: fallback, cn: fallback, en: fallback, typeId: typeId || '', pairGroup };
+      }
+      const inferred = fromType || findResourceTypeByJp(jp) || findResourceTypeByJp(cn);
+      return {
+        jp,
+        cn,
+        en,
+        typeId: typeId || (inferred && inferred.id) || '',
+        pairGroup,
+      };
+    }
+    const s = String(raw || '').trim();
+    if (!s) {
+      const fallback = `R${(index || 0) + 1}`;
+      return { jp: fallback, cn: fallback, en: fallback, typeId: '', pairGroup: '' };
+    }
+    const fromCat = findResourceTypeById(s) || findResourceTypeByJp(s);
+    if (fromCat) {
+      return { jp: fromCat.jp, cn: fromCat.cn, en: fromCat.en, typeId: fromCat.id, pairGroup: '' };
+    }
+    return { jp: s, cn: s, en: s, typeId: '', pairGroup: '' };
   }
 
   function matchResourceTypeId(label) {
     const n = normalizeBedLabel(label, 0);
-    const hit = findResourceTypeByJp(n.jp);
+    if (n.typeId && findResourceTypeById(n.typeId)) return n.typeId;
+    const hit = findResourceTypeByJp(n.jp) || findResourceTypeByJp(n.cn);
     return hit ? hit.id : '';
+  }
+
+  /** 双人房占两行：选中/关房时把同 pairGroup 的行一并纳入 */
+  function expandBedIndexes(store, bedIndexes) {
+    const labels = (store && store.bedLabels) || [];
+    const set = new Set((bedIndexes || []).map((n) => Number(n)).filter((n) => Number.isFinite(n)));
+    const groups = new Set();
+    set.forEach((idx) => {
+      const g = String((labels[idx] && labels[idx].pairGroup) || '').trim();
+      if (g) groups.add(g);
+    });
+    if (!groups.size) return Array.from(set).sort((a, b) => a - b);
+    labels.forEach((lab, idx) => {
+      const g = String((lab && lab.pairGroup) || '').trim();
+      if (g && groups.has(g)) set.add(idx);
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }
+
+  function assignPairGroups(storeId, labels) {
+    const out = [];
+    for (let i = 0; i < labels.length; i += 1) {
+      const n = normalizeBedLabel(labels[i], i);
+      const typeId = String(n.typeId || matchResourceTypeId(n) || '').trim();
+      let pairGroup = '';
+      if (typeId === 'pair') {
+        const prev = i > 0 ? out[i - 1] : null;
+        if (prev && prev.typeId === 'pair' && prev.pairGroup) {
+          pairGroup = prev.pairGroup;
+        } else {
+          pairGroup = String(n.pairGroup || `pair-${storeId}-${i}`).trim();
+        }
+      }
+      const fromType = findResourceTypeById(typeId);
+      out.push({
+        jp: n.jp || (fromType && fromType.jp) || `R${i + 1}`,
+        cn: n.cn || (fromType && fromType.cn) || n.jp || `R${i + 1}`,
+        en: n.en || (fromType && fromType.en) || n.jp || `R${i + 1}`,
+        typeId,
+        pairGroup,
+      });
+    }
+    return out;
   }
 
   function setResourceOverride(storeId, patch) {
@@ -307,12 +347,12 @@
       Math.min(20, Number(next.bedCount != null ? next.bedCount : (base && base.bedCount) || 1))
     );
     let labels = Array.isArray(next.bedLabels)
-      ? next.bedLabels.map((x, i) => normalizeBedLabel(x, i))
-      : (base && base.bedLabels ? base.bedLabels.map((x, i) => normalizeBedLabel(x, i)) : []);
+      ? next.bedLabels.slice()
+      : (base && base.bedLabels ? base.bedLabels.slice() : []);
     while (labels.length < count) {
-      labels.push(normalizeBedLabel(null, labels.length));
+      labels.push({ typeId: 'single' });
     }
-    labels = labels.slice(0, count);
+    labels = assignPairGroups(storeId, labels.slice(0, count));
 
     let courses = Array.isArray(next.courses) ? next.courses : prev.courses;
     // 覆盖保存时保留多语 name / 时长 / 价格
@@ -486,5 +526,7 @@
     findResourceTypeById,
     matchResourceTypeId,
     normalizeBedLabel,
+    expandBedIndexes,
+    RESOURCE_TYPES,
   };
 })(window);

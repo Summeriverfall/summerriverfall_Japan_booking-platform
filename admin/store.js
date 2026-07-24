@@ -528,20 +528,25 @@
 
   /** 仅打开某资源的整日关（多资源共用一条时，只从中去掉该资源） */
   function openDayBed(dateStr, bedIndex) {
-    const bed = Number(bedIndex);
-    const targets = findDayClosuresForBed(dateStr, bed);
-    if (!targets.length) {
+    const beds = expandBeds([bedIndex]);
+    let released = 0;
+    beds.forEach((bed) => {
+      const targets = findDayClosuresForBed(dateStr, bed);
+      if (!targets.length) return;
+      targets.forEach((c) => {
+        const rest = (c.beds || []).filter((b) => !beds.includes(b));
+        if (!rest.length) {
+          releaseClosure(c.id);
+        } else {
+          updateClosure(c.id, { beds: rest });
+        }
+        released += 1;
+      });
+    });
+    if (!released) {
       return { ok: false, error: '该资源当前没有整日关闭记录' };
     }
-    targets.forEach((c) => {
-      const rest = (c.beds || []).filter((b) => b !== bed);
-      if (!rest.length) {
-        releaseClosure(c.id);
-      } else {
-        updateClosure(c.id, { beds: rest });
-      }
-    });
-    return { ok: true, released: targets.length };
+    return { ok: true, released };
   }
 
   /**
@@ -567,31 +572,44 @@
   }
 
   /** 整日关闭某资源：覆盖其已有时段关，已整日关则拒绝重复 */
+  function expandBeds(bedIndexes) {
+    const list = (bedIndexes || []).map(Number).filter((i) => Number.isFinite(i));
+    if (global.StoreRegistry && typeof StoreRegistry.expandBedIndexes === 'function') {
+      const cfg = global.STORE_CONFIG || {};
+      return StoreRegistry.expandBedIndexes(cfg, list);
+    }
+    return list;
+  }
+
   function closeDayBed(dateStr, bedIndex, meta) {
-    const bed = Number(bedIndex);
-    if (hasDayClosureForBed(dateStr, bed)) {
-      const name = bedName(bed);
+    const beds = expandBeds([bedIndex]);
+    if (!beds.length) return { ok: false, error: '无效资源' };
+    const already = beds.filter((b) => hasDayClosureForBed(dateStr, b));
+    if (already.length) {
+      const names = already.map((b) => bedName(b)).join('、');
       return {
         ok: false,
-        error: `「${name}」已整日关闭，不能重复关闭。请先点左侧「开」释放后再关。`,
+        error: `「${names}」已整日关闭，不能重复关闭。请先点左侧「开」释放后再关。`,
       };
     }
 
     const startTime = offsetToTime(0);
     const endTime = offsetToTime(businessSpanMinutes());
 
-    // 清掉该资源上所有重叠的时段关（整日关覆盖）
-    const overlaps = findOverlappingClosures(dateStr, startTime, endTime, [bed]);
+    // 清掉这些资源上所有重叠的时段关（整日关覆盖）
+    const overlaps = findOverlappingClosures(dateStr, startTime, endTime, beds);
     overlaps.forEach((c) => {
       if (isDayScopeClosure(c)) return;
-      removeBedFromClosure(c.id, bed);
+      beds.forEach((bed) => {
+        if ((c.beds || []).includes(bed)) removeBedFromClosure(c.id, bed);
+      });
     });
 
     return setClosure({
       date: dateStr,
       startTime,
       endTime,
-      beds: [bed],
+      beds,
       reason: (meta && meta.reason) || '临时关闭',
       reasonCode: (meta && meta.reasonCode) || '',
       scope: 'day',
