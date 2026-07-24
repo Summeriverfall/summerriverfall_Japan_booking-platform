@@ -33,7 +33,25 @@
       width: 100%; border: 1px solid var(--line); border-radius: 8px;
       padding: .4rem .55rem; font: inherit; background: #fff;
     }
+    .res-edit select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 2rem;
+      background-color: #fff;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236e675e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right .7rem center;
+      cursor: pointer;
+    }
+    .res-edit select:disabled {
+      opacity: .85;
+      cursor: default;
+      background-color: #f7f2eb;
+    }
     .res-labels { display: grid; gap: .35rem; }
+    .res-type-hint {
+      font-size: .72rem; color: var(--muted); margin: -.1rem 0 .35rem;
+    }
     .res-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
     .res-actions .btn {
       border: 1px solid var(--line); background: #fff; border-radius: 8px;
@@ -66,8 +84,8 @@
     <div class="store-grid" id="storeGrid"></div>
   </main>
 
-  <script src="stores.js"></script>
-  <script src="desk-i18n.js"></script>
+  <script src="stores.js?v=20260724-rt1"></script>
+  <script src="desk-i18n.js?v=20260724-rt1"></script>
   <script>
     StoreRegistry.setRole('admin');
     const grid = document.getElementById('storeGrid');
@@ -112,7 +130,20 @@
           return `<option value="${escapeHtml(t.id)}"${sel}>${escapeHtml(typeOptionLabel(t))}</option>`;
         })
         .join('');
-      return `<select data-label-i="${index}" ${canEdit ? '' : 'disabled'}>${opts}</select>`;
+      // 若当前值不在类型表中，仍展示当前文案并保留
+      let extra = '';
+      if (!selectedId && currentLabel) {
+        const text =
+          typeof currentLabel === 'object'
+            ? currentLabel.jp || currentLabel.cn || currentLabel.en || ''
+            : String(currentLabel);
+        if (text) {
+          extra = `<option value="${escapeHtml(text)}" selected>${escapeHtml(text)} （当前）</option>`;
+        }
+      }
+      return `<select class="res-type-select" data-label-i="${index}" ${
+        canEdit ? '' : 'disabled'
+      }>${extra}${opts}</select>`;
     }
 
     function render() {
@@ -142,6 +173,7 @@
               <label>${escapeHtml(DeskI18n.t('resCount'))}</label>
               <input type="number" min="1" max="20" data-count value="${s.bedCount}">
               <label>${escapeHtml(DeskI18n.t('resNames'))}</label>
+              <p class="res-type-hint">请从下拉列表选择资源类型（非自由输入）</p>
               <div class="res-labels" data-labels>${labels}</div>
               <label>${escapeHtml(DeskI18n.t('coursesLabel'))}</label>
               <textarea data-courses rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .55rem;font:inherit;line-height:1.45">${escapeHtml(
