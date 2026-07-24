@@ -1,5 +1,5 @@
 /**
- * 技师工作端：技师 + 项目 + 时间表点选 + 提交保存
+ * 技师工作端：时间表总览 + 技师/项目选择 + 提交保存
  */
 (function () {
   if (!StoreRegistry.requireStoreOrRedirect('tech-login.html')) return;
@@ -19,9 +19,7 @@
     bedIndex: null,
     startOffset: null,
     duration: 60,
-    logDate: BookingStore.todayBusinessDate(),
     boardDate: BookingStore.todayBusinessDate(),
-    boardView: 'time',
   };
 
   if (state.techId) StoreRegistry.setTechnician(state.techId);
@@ -36,10 +34,8 @@
     courseGrid: document.getElementById('courseGrid'),
     slotBoard: document.getElementById('slotBoard'),
     dateInput: document.getElementById('dateInput'),
-    boardRoot: document.getElementById('boardRoot'),
     dayCount: document.getElementById('dayCount'),
     toast: document.getElementById('toast'),
-    viewFilter: document.getElementById('viewFilter'),
     btnRefresh: document.getElementById('btnRefresh'),
     btnSubmit: document.getElementById('btnSubmit'),
     btnClear: document.getElementById('btnClear'),
@@ -105,10 +101,16 @@
     return state.duration || 60;
   }
 
+  function courseTitle(course) {
+    if (TechI18n.courseTitle) return TechI18n.courseTitle(course);
+    return String(TechI18n.courseLabel(course) || '')
+      .replace(/\s*[\(（]?\s*\d+\s*(分|分钟|mins?|minutes?)\s*[\)）]?\s*$/i, '')
+      .trim();
+  }
+
   function selectionEndOffset() {
     if (state.startOffset == null) return null;
     const span = spanMinutes();
-    // 未选项目时只标开始格；选了项目才按项目时长拉长
     const dur = state.courseId ? state.duration || snap : snap;
     return Math.min(span, state.startOffset + dur);
   }
@@ -136,7 +138,6 @@
     renderTechs();
     renderCourses();
     renderSlotBoard();
-    renderDayList();
   }
 
   function renderSummary() {
@@ -145,7 +146,7 @@
     const course = selectedCourse();
     if (tech) parts.push(TechI18n.techName(tech));
     if (course) {
-      parts.push(`${TechI18n.courseLabel(course)}（${state.duration}${TechI18n.t('min')}）`);
+      parts.push(`${courseTitle(course)}（${state.duration}${TechI18n.t('min')}）`);
     }
     if (state.bedIndex != null && state.startOffset != null) {
       const start = offsetToTime(state.startOffset);
@@ -190,11 +191,10 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'course-tile' + (state.courseId === course.id ? ' is-on' : '');
-      btn.innerHTML = `<span class="course-name">${TechI18n.courseLabel(course)}</span><span class="course-dur">${dur}${TechI18n.t('min')}</span>`;
+      btn.innerHTML = `<span class="course-name">${courseTitle(course)}</span><span class="course-dur">${dur}${TechI18n.t('min')}</span>`;
       btn.addEventListener('click', () => {
         state.courseId = course.id;
         state.duration = dur;
-        // 若已在表上选了开始位置，自动更新该段时长
         if (state.startOffset != null) {
           const span = spanMinutes();
           if (state.startOffset + state.duration > span) {
@@ -225,11 +225,17 @@
     return list;
   }
 
+  function updateDayCount(logs) {
+    const unit = TechI18n.t('dayCount');
+    els.dayCount.textContent = unit ? `${logs.length} ${unit}` : String(logs.length);
+  }
+
   function renderSlotBoard() {
     const span = spanMinutes();
     const count = bedCount();
     const logs = TechWorkStore.listByDate(state.boardDate);
     const hours = hourSlots();
+    updateDayCount(logs);
 
     els.slotBoard.innerHTML = '';
     const board = document.createElement('div');
@@ -254,7 +260,6 @@
       row.innerHTML = `<div class="tech-board-label">${resourceLabel(bed)}</div><div class="tech-board-track" data-bed="${bed}"></div>`;
       const track = row.querySelector('.tech-board-track');
 
-      // slot cells for click targets
       for (let off = 0; off < span; off += snap) {
         const cell = document.createElement('button');
         cell.type = 'button';
@@ -278,34 +283,40 @@
         track.appendChild(cell);
       }
 
-      // existing logs on this bed
       logs
         .filter((l) => Number(l.bedIndex) === bed)
         .forEach((log) => {
           const startOff = timeToOffset(log.startTime);
-          const dur = Number(log.durationMinutes) || Math.max(snap, timeToOffset(log.endTime) - startOff);
-          const block = document.createElement('div');
+          const dur =
+            Number(log.durationMinutes) ||
+            Math.max(snap, timeToOffset(log.endTime) - startOff);
+          const block = document.createElement('button');
+          block.type = 'button';
           block.className = 'tech-board-block';
           block.style.left = `${(startOff / span) * 100}%`;
           block.style.width = `${(Math.min(dur, span - startOff) / span) * 100}%`;
           const tech = techs.find((t) => t.id === log.technicianId);
           const course =
             courses.find((c) => c.id === log.courseId) || { name: log.courseName };
-          block.innerHTML = `<strong>${log.startTime}</strong> ${TechI18n.techName(tech) || ''}<br>${TechI18n.courseLabel(course) || (typeof log.courseName === 'string' ? log.courseName : '')}`;
-          block.title = `${TechI18n.techName(tech)} · ${TechI18n.courseLabel(course)}`;
+          const title = courseTitle(course) || (typeof log.courseName === 'string' ? log.courseName : '');
+          block.innerHTML = `<strong>${log.startTime}</strong> ${TechI18n.techName(tech) || ''}<br>${title}`;
+          block.title = `${TechI18n.techName(tech)} · ${title} · ${TechI18n.t('delete')}`;
+          block.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!confirm(TechI18n.t('confirmDelete'))) return;
+            TechWorkStore.removeLog(log.id);
+            renderSlotBoard();
+          });
           track.appendChild(block);
         });
 
-      // current selection
       if (state.bedIndex === bed && state.startOffset != null) {
         const endOff = selectionEndOffset();
         const sel = document.createElement('div');
         sel.className = 'tech-board-selection';
         sel.style.left = `${(state.startOffset / span) * 100}%`;
         sel.style.width = `${(((endOff - state.startOffset) / span) * 100)}%`;
-        const start = offsetToTime(state.startOffset);
-        const end = offsetToTime(endOff);
-        sel.textContent = `${start}–${end}`;
+        sel.textContent = `${offsetToTime(state.startOffset)}–${offsetToTime(endOff)}`;
         track.appendChild(sel);
       }
 
@@ -322,10 +333,7 @@
     showToast._t = setTimeout(() => els.toast.classList.remove('is-show'), 2200);
   }
 
-  function clearPick(keepTech) {
-    if (!keepTech) {
-      /* keep tech as convenience */
-    }
+  function clearPick() {
     state.courseId = null;
     state.bedIndex = null;
     state.startOffset = null;
@@ -351,7 +359,7 @@
       endTime,
       durationMinutes: duration,
       courseId: course.id,
-      courseName: TechI18n.courseLabel(course),
+      courseName: courseTitle(course),
     });
     if (res.ok) {
       showToast(TechI18n.t('saved'));
@@ -361,94 +369,6 @@
       state.duration = 60;
       renderAll();
     }
-  }
-
-  function findTech(id) {
-    return techs.find((t) => t.id === id) || null;
-  }
-
-  function dayLogs() {
-    return TechWorkStore.listByDate(state.boardDate);
-  }
-
-  function renderDayList() {
-    const logs = dayLogs();
-    const unit = TechI18n.t('dayCount');
-    els.dayCount.textContent = unit ? `${logs.length} ${unit}` : String(logs.length);
-    els.boardRoot.innerHTML = '';
-    if (!logs.length) {
-      const empty = document.createElement('div');
-      empty.className = 'day-empty';
-      empty.textContent = TechI18n.t('emptyDay');
-      els.boardRoot.appendChild(empty);
-      return;
-    }
-
-    if (state.boardView === 'time') {
-      const wrap = document.createElement('div');
-      wrap.className = 'time-list time-list--compact';
-      logs.forEach((log) => wrap.appendChild(logCard(log, true)));
-      els.boardRoot.appendChild(wrap);
-      return;
-    }
-
-    const cols = document.createElement('div');
-    cols.className = 'tech-columns';
-    techs.forEach((tech) => {
-      const mine = logs.filter((l) => l.technicianId === tech.id);
-      const col = document.createElement('div');
-      col.className = 'tech-col' + (tech.id === state.techId ? ' is-me' : '');
-      col.innerHTML = `<h3><span>${TechI18n.techName(tech)}</span><span class="count">${mine.length}</span></h3>`;
-      if (!mine.length) {
-        const p = document.createElement('p');
-        p.className = 'section-hint';
-        p.textContent = '—';
-        col.appendChild(p);
-      } else {
-        mine.forEach((log) => col.appendChild(logCard(log, false)));
-      }
-      cols.appendChild(col);
-    });
-    els.boardRoot.appendChild(cols);
-  }
-
-  function logCard(log, showTech) {
-    const el = document.createElement('div');
-    el.className = 'log-card';
-    const tech = findTech(log.technicianId);
-    const course =
-      courses.find((c) => c.id === log.courseId) || { name: log.courseName };
-    const when = `${log.startTime}–${log.endTime}`;
-    const where = resourceLabel(log.bedIndex);
-    const courseText =
-      TechI18n.courseLabel(course) ||
-      (log.courseName && typeof log.courseName === 'object'
-        ? TechI18n.courseLabel({ name: log.courseName })
-        : String(log.courseName || ''));
-    let html = `<div><div class="when">${when}</div>`;
-    if (showTech) {
-      html += `<div class="meta">${TechI18n.techName(tech) || log.technicianId} · ${where}</div>`;
-    } else {
-      html += `<div class="meta">${where}</div>`;
-    }
-    html += `<div>${courseText}</div></div>`;
-    el.innerHTML = html;
-
-    const actions = document.createElement('div');
-    actions.className = 'row-actions';
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'btn-del';
-    del.textContent = TechI18n.t('delete');
-    del.addEventListener('click', () => {
-      if (!confirm(TechI18n.t('confirmDelete'))) return;
-      TechWorkStore.removeLog(log.id);
-      renderDayList();
-      renderSlotBoard();
-    });
-    actions.appendChild(del);
-    el.appendChild(actions);
-    return el;
   }
 
   els.langSwitch.addEventListener('click', (e) => {
@@ -467,31 +387,13 @@
   els.dateInput.value = state.boardDate;
   els.dateInput.addEventListener('change', () => {
     state.boardDate = els.dateInput.value || BookingStore.todayBusinessDate();
-    state.logDate = state.boardDate;
-    renderDayList();
-    renderSlotBoard();
+    clearPick();
   });
 
-  els.viewFilter.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-view]');
-    if (!btn) return;
-    state.boardView = btn.dataset.view;
-    els.viewFilter.querySelectorAll('button').forEach((b) => {
-      b.classList.toggle('is-on', b === btn);
-    });
-    renderDayList();
-  });
-
-  els.btnRefresh.addEventListener('click', () => {
-    renderDayList();
-    renderSlotBoard();
-  });
+  els.btnRefresh.addEventListener('click', () => renderSlotBoard());
   els.btnSubmit.addEventListener('click', submitLog);
-  els.btnClear.addEventListener('click', () => clearPick(true));
-  window.addEventListener('tech-work-changed', () => {
-    renderDayList();
-    renderSlotBoard();
-  });
+  els.btnClear.addEventListener('click', clearPick);
+  window.addEventListener('tech-work-changed', () => renderSlotBoard());
 
   applyI18n();
 })();

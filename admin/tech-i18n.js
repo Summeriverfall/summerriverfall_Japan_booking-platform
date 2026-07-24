@@ -14,12 +14,13 @@
       loginErr: 'コードが正しくありません',
       backHome: '← 入口へ戻る',
       tabLog: '記録する',
-      tabBoard: '本日の配置',
+      tabBoard: '本日のタイムテーブル',
       logout: 'ログアウト',
       pickTech: 'スタッフ',
       pickCourse: 'コース',
-      pickSlot: '時間表（セルをタップして開始位置を選ぶ）',
-      courseHint: 'コースを選ぶと施術時間が自動で入ります。表で開始位置を選んでから「送信」',
+      pickSlot: '時間表',
+      boardHint: 'セルをタップして開始位置を選ぶ。既存の記録をタップすると削除できます',
+      courseHint: 'コースを選ぶと施術時間が自動で入ります。上の表で開始位置を選んでから「送信」',
       min: '分',
       saved: '記録しました',
       needPick: 'スタッフ・コース・開始位置を選んでください',
@@ -47,11 +48,12 @@
       loginErr: '识别码无效，请重试',
       backHome: '← 返回平台入口',
       tabLog: '记工',
-      tabBoard: '今日安排',
+      tabBoard: '今日时间表',
       logout: '退出',
       pickTech: '技师',
       pickCourse: '项目',
-      pickSlot: '时间表（点击格子选开始位置）',
+      pickSlot: '时间表',
+      boardHint: '点击格子选择开始位置；点击已有记录可删除',
       courseHint: '选项目会自动带入时长；若已点选表上位置，会同步更新该段时长。需点「提交保存」才会写入',
       min: '分钟',
       saved: '已记录',
@@ -80,11 +82,12 @@
       loginErr: 'Invalid code',
       backHome: '← Back to hub',
       tabLog: 'Log work',
-      tabBoard: 'Today board',
+      tabBoard: 'Today timeline',
       logout: 'Log out',
       pickTech: 'Staff',
       pickCourse: 'Course',
-      pickSlot: 'Timeline (tap a cell for start)',
+      pickSlot: 'Timeline',
+      boardHint: 'Tap a cell to set start. Tap an existing block to delete.',
       courseHint: 'Choosing a course sets duration. If a board cell is selected, its length updates. Submit to save.',
       min: 'min',
       saved: 'Saved',
@@ -156,5 +159,13 @@
     return base;
   }
 
-  global.TechI18n = { getLang, setLang, t, techName, courseLabel, DICT };
+  /** 去掉名称末尾自带的时长，避免和单独的时长行重复 */
+  function courseTitle(course) {
+    return String(courseLabel(course) || '')
+      .replace(/\s*[\(（]?\s*\d+\s*(分|分钟|mins?|minutes?)\s*[\)）]?\s*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  global.TechI18n = { getLang, setLang, t, techName, courseLabel, courseTitle, DICT };
 })(window);

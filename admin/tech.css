@@ -179,6 +179,14 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
+.board-hint {
+  margin: 0 0 .65rem;
+}
+
+.day-overview .tech-board-wrap {
+  margin-top: 0;
+}
+
 /* —— 记工单页 —— */
 .log-sheet {
   background: var(--card);
@@ -597,15 +605,21 @@ html, body {
   top: 4px;
   bottom: 4px;
   z-index: 2;
+  border: none;
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 78%, #1a1714);
   color: #fff;
+  font: inherit;
   font-size: .68rem;
   line-height: 1.25;
   padding: .25rem .4rem;
   overflow: hidden;
-  pointer-events: none;
+  cursor: pointer;
+  text-align: left;
   box-shadow: 0 2px 8px rgba(30, 50, 35, .18);
+}
+.tech-board-block:hover {
+  filter: brightness(1.08);
 }
 .tech-board-block strong {
   font-weight: 700;
@@ -633,9 +647,6 @@ html, body {
 @media (max-width: 720px) {
   .pick-block--time {
     grid-template-columns: 1fr;
-  }
-  .day-overview-body {
-    max-height: 30vh;
   }
   .tech-board,
   .tech-board-head,
