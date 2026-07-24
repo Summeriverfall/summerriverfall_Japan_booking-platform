@@ -228,6 +228,75 @@
     return all[storeId] || null;
   }
 
+  function normalizeBedLabel(raw, index) {
+    if (raw && typeof raw === 'object') {
+      const jp = String(raw.jp || raw.cn || raw.en || '').trim();
+      if (!jp && !raw.cn && !raw.en) {
+        return { jp: `资源${(index || 0) + 1}`, cn: `资源${(index || 0) + 1}`, en: `Resource ${(index || 0) + 1}` };
+      }
+      return {
+        jp: String(raw.jp || jp).trim(),
+        cn: String(raw.cn || raw.jp || jp).trim(),
+        en: String(raw.en || raw.jp || jp).trim(),
+      };
+    }
+    const s = String(raw || '').trim();
+    if (!s) {
+      return { jp: `资源${(index || 0) + 1}`, cn: `资源${(index || 0) + 1}`, en: `Resource ${(index || 0) + 1}` };
+    }
+    // 若是类型 id，解析为完整三语文案
+    const fromCat = findResourceTypeById(s) || findResourceTypeByJp(s);
+    if (fromCat) return { jp: fromCat.jp, cn: fromCat.cn, en: fromCat.en };
+    return { jp: s, cn: s, en: s };
+  }
+
+  /** 各店出现过的资源类型（去重，按日文名） */
+  function listResourceTypes() {
+    const map = new Map();
+    STORES.forEach((store) => {
+      (store.bedLabels || []).forEach((lab) => {
+        let jp = '';
+        let cn = '';
+        let en = '';
+        if (lab && typeof lab === 'object') {
+          jp = String(lab.jp || lab.cn || lab.en || '').trim();
+          cn = String(lab.cn || lab.jp || jp).trim();
+          en = String(lab.en || lab.jp || jp).trim();
+        } else {
+          jp = String(lab || '').trim();
+          cn = jp;
+          en = jp;
+        }
+        if (!jp || map.has(jp)) return;
+        const id =
+          'rt-' +
+          (
+            jp
+              .replace(/\s+/g, '-')
+              .replace(/[^\w\u3040-\u30ff\u4e00-\u9fff\-]/g, '')
+              .slice(0, 40) || `type-${map.size + 1}`
+          );
+        map.set(jp, { id, jp, cn, en });
+      });
+    });
+    return Array.from(map.values());
+  }
+
+  function findResourceTypeById(id) {
+    return listResourceTypes().find((t) => t.id === id) || null;
+  }
+
+  function findResourceTypeByJp(jp) {
+    const s = String(jp || '').trim();
+    return listResourceTypes().find((t) => t.jp === s || t.cn === s || t.en === s) || null;
+  }
+
+  function matchResourceTypeId(label) {
+    const n = normalizeBedLabel(label, 0);
+    const hit = findResourceTypeByJp(n.jp);
+    return hit ? hit.id : '';
+  }
+
   function setResourceOverride(storeId, patch) {
     const all = readResourceOverrides();
     const prev = all[storeId] || {};
@@ -238,10 +307,12 @@
       Math.min(20, Number(next.bedCount != null ? next.bedCount : (base && base.bedCount) || 1))
     );
     let labels = Array.isArray(next.bedLabels)
-      ? next.bedLabels.map((x) => String(x || '').trim())
-      : (base && base.bedLabels ? base.bedLabels.slice() : []);
-    while (labels.length < count) labels.push(`资源${labels.length + 1}`);
-    labels = labels.slice(0, count).map((name, i) => name || `资源${i + 1}`);
+      ? next.bedLabels.map((x, i) => normalizeBedLabel(x, i))
+      : (base && base.bedLabels ? base.bedLabels.map((x, i) => normalizeBedLabel(x, i)) : []);
+    while (labels.length < count) {
+      labels.push(normalizeBedLabel(null, labels.length));
+    }
+    labels = labels.slice(0, count);
 
     let courses = Array.isArray(next.courses) ? next.courses : prev.courses;
     // 覆盖保存时保留多语 name / 时长 / 价格
@@ -411,5 +482,9 @@
     getTechnicianId,
     getTechnician,
     findTechnicianByCode,
+    listResourceTypes,
+    findResourceTypeById,
+    matchResourceTypeId,
+    normalizeBedLabel,
   };
 })(window);

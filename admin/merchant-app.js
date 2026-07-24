@@ -66,6 +66,7 @@
   const reasonOtherEl = document.getElementById('reasonOther');
   const reasonChips = document.getElementById('reasonChips');
   const btnClose = document.getElementById('btnClose');
+  const btnConfirmBooking = document.getElementById('btnConfirmBooking');
   const btnRelease = document.getElementById('btnRelease');
   const btnApproveOpen = document.getElementById('btnApproveOpen');
   const btnRejectOpen = document.getElementById('btnRejectOpen');
@@ -328,6 +329,17 @@
     if (openReqHint) openReqHint.hidden = !hasRequest || sheetMode === 'request' || sheetMode === 'booking';
     if (btnApproveOpen) btnApproveOpen.hidden = !(hasRequest && sheetMode !== 'request' && sheetMode !== 'booking');
     if (btnRejectOpen) btnRejectOpen.hidden = !(hasRequest && sheetMode !== 'request' && sheetMode !== 'booking');
+
+    const booking =
+      selectedBookingId &&
+      BookingStore.listBookings(currentDate()).find((b) => b.id === selectedBookingId);
+    const canConfirmBooking =
+      sheetMode === 'booking' && booking && booking.status === 'pending_confirm';
+    if (btnConfirmBooking) {
+      btnConfirmBooking.hidden = !canConfirmBooking;
+      btnConfirmBooking.textContent = DeskI18n.t('btnConfirmBooking');
+    }
+
     if (sheetMode === 'request' || sheetMode === 'booking') {
       btnClose.hidden = true;
       btnRelease.hidden = true;
@@ -374,6 +386,7 @@
     sheetMode = null;
     selectedBookingId = null;
     setSheetBodies(null);
+    if (btnConfirmBooking) btnConfirmBooking.hidden = true;
     if (!selectedClosureId) setDockOn(null);
   }
 
@@ -518,6 +531,7 @@
     const channel = (STORE_CONFIG.channels || []).find((c) => c.id === booking.channelId);
     const endOff =
       BookingStore.timeToOffset(booking.startTime) + (booking.durationMinutes || 60);
+    const pending = booking.status === 'pending_confirm';
     if (sideBookingDetail) {
       sideBookingDetail.innerHTML = `
         <div><strong>${booking.guestName || '客人'}</strong> · ${statusLabel(booking.status)}</div>
@@ -527,11 +541,30 @@
         <div>人数：${booking.guests || 1}</div>
         <div>渠道：${(channel && channel.name) || booking.channelId || '—'}</div>
         <div>备注：${booking.note || '—'}</div>
-        <div class="hint" style="margin-top:.35rem">商家端只读，改预约请用客服端。</div>
+        <div class="hint" style="margin-top:.35rem">${
+          pending ? DeskI18n.t('bookingConfirmHint') : DeskI18n.t('bookingReadonly')
+        }</div>
       `;
     }
-    if (sideTitle) sideTitle.textContent = '预约信息';
-    openSide('只读查看 · 含项目', point);
+    if (sideTitle) sideTitle.textContent = pending ? DeskI18n.t('statusPending') : '预约信息';
+    openSide(pending ? DeskI18n.t('bookingConfirmHint') : DeskI18n.t('bookingReadonly'), point);
+  }
+
+  function confirmSelectedBooking() {
+    if (!selectedBookingId) return;
+    const r = BookingStore.confirmBooking(selectedBookingId);
+    if (!r.ok) {
+      formErr.className = 'err';
+      formErr.textContent = r.error || '确认失败';
+      return;
+    }
+    formErr.className = 'hint ok';
+    formErr.textContent = DeskI18n.t('bookingConfirmed');
+    openBookingView(r.booking, {
+      x: window.innerWidth / 2,
+      y: window.innerHeight - 80,
+    });
+    refresh();
   }
 
   function openRequestSheet() {
@@ -620,6 +653,13 @@
                 <div class="meta">资源：${beds || '—'} · ${b.guests || 1}人</div>
                 <div class="actions">
                   <button type="button" class="btn" data-view-booking="${b.id}">查看</button>
+                  ${
+                    b.status === 'pending_confirm'
+                      ? `<button type="button" class="btn primary" data-confirm-booking="${b.id}">${DeskI18n.t(
+                          'btnConfirmBooking'
+                        )}</button>`
+                      : ''
+                  }
                 </div>
               </div>`;
             })
@@ -1302,6 +1342,13 @@
 
   if (bookingListToday) {
     bookingListToday.addEventListener('click', (e) => {
+      const confirmBtn = e.target.closest('[data-confirm-booking]');
+      if (confirmBtn) {
+        const id = confirmBtn.getAttribute('data-confirm-booking');
+        selectedBookingId = id;
+        confirmSelectedBooking();
+        return;
+      }
       const btn = e.target.closest('[data-view-booking]');
       if (!btn) return;
       const id = btn.getAttribute('data-view-booking');
@@ -1311,6 +1358,10 @@
         refresh();
       }
     });
+  }
+
+  if (btnConfirmBooking) {
+    btnConfirmBooking.addEventListener('click', () => confirmSelectedBooking());
   }
 
   if (occStrip) {

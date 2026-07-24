@@ -28,7 +28,8 @@
     .store-card.is-editing .entry-go { display: none; }
     .res-edit label { display: block; font-size: .75rem; color: var(--muted); margin: .45rem 0 .2rem; }
     .res-edit input[type="number"],
-    .res-edit input[type="text"] {
+    .res-edit input[type="text"],
+    .res-edit select {
       width: 100%; border: 1px solid var(--line); border-radius: 8px;
       padding: .4rem .55rem; font: inherit; background: #fff;
     }
@@ -97,20 +98,29 @@
       return DeskI18n.storeName(s);
     }
 
+    function typeOptionLabel(t) {
+      const lang = DeskI18n.getLang();
+      return t[lang] || t.jp || t.cn || t.en || t.id;
+    }
+
+    function resourceTypeSelectHtml(currentLabel, index, canEdit) {
+      const types = StoreRegistry.listResourceTypes();
+      const selectedId = StoreRegistry.matchResourceTypeId(currentLabel);
+      const opts = types
+        .map((t) => {
+          const sel = t.id === selectedId ? ' selected' : '';
+          return `<option value="${escapeHtml(t.id)}"${sel}>${escapeHtml(typeOptionLabel(t))}</option>`;
+        })
+        .join('');
+      return `<select data-label-i="${index}" ${canEdit ? '' : 'disabled'}>${opts}</select>`;
+    }
+
     function render() {
       const stores = StoreRegistry.listStores();
       grid.innerHTML = stores
         .map((s) => {
           const labels = (s.bedLabels || [])
-            .map((name, i) => {
-              const text =
-                typeof name === 'object'
-                  ? name.jp || name.cn || name.en || `R${i + 1}`
-                  : name;
-              return `<input type="text" data-label-i="${i}" value="${escapeHtml(text)}" ${
-                editing ? '' : 'readonly'
-              }>`;
-            })
+            .map((name, i) => resourceTypeSelectHtml(name, i, editing))
             .join('');
           return `
           <div class="store-card ${editing ? 'is-editing' : ''}" data-store="${escapeHtml(s.storeId)}" style="--accent:${s.accent}">
@@ -161,14 +171,16 @@
           const n = Math.max(1, Math.min(20, Number(input.value) || 1));
           input.value = String(n);
           const box = card.querySelector('[data-labels]');
-          const cur = [...box.querySelectorAll('input')].map((el) => el.value);
-          while (cur.length < n) cur.push(`资源${cur.length + 1}`);
+          const cur = [...box.querySelectorAll('select')].map((el) => el.value);
+          const types = StoreRegistry.listResourceTypes();
+          const fallback = types[0] ? types[0].id : '';
+          while (cur.length < n) cur.push(fallback);
           box.innerHTML = cur
             .slice(0, n)
-            .map(
-              (name, i) =>
-                `<input type="text" data-label-i="${i}" value="${escapeHtml(name)}">`
-            )
+            .map((typeId, i) => {
+              const t = StoreRegistry.findResourceTypeById(typeId) || types[0];
+              return resourceTypeSelectHtml(t || typeId, i, true);
+            })
             .join('');
         });
       });
@@ -178,9 +190,12 @@
           const card = btn.closest('.store-card');
           const storeId = card.getAttribute('data-store');
           const count = Number(card.querySelector('[data-count]').value) || 1;
-          const bedLabels = [...card.querySelectorAll('[data-labels] input')].map(
-            (el) => el.value.trim() || '资源'
-          );
+          const bedLabels = [...card.querySelectorAll('[data-labels] select')].map((el) => {
+            const t = StoreRegistry.findResourceTypeById(el.value);
+            return t
+              ? { jp: t.jp, cn: t.cn, en: t.en }
+              : StoreRegistry.normalizeBedLabel(el.value, 0);
+          });
           const courses = String(card.querySelector('[data-courses]').value || '')
             .split(/\n+/)
             .map((line) => line.trim())

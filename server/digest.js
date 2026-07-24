@@ -29,9 +29,9 @@ function writeAll(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
-function shanghaiNowParts() {
+function tokyoNowParts() {
   const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
+    timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -42,10 +42,17 @@ function shanghaiNowParts() {
   const parts = Object.fromEntries(
     fmt.formatToParts(new Date()).map((p) => [p.type, p.value])
   );
+  let hour = parts.hour;
+  if (hour === '24') hour = '00';
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
-    time: `${parts.hour}:${parts.minute}`,
+    time: `${hour}:${parts.minute}`,
   };
+}
+
+/** @deprecated 使用 tokyoNowParts；保留别名避免旧引用报错 */
+function shanghaiNowParts() {
+  return tokyoNowParts();
 }
 
 /**
@@ -101,7 +108,7 @@ function listStatus() {
  * 检查并发送到期的每日汇总；sendFn({to,subject,text,chartDataUrl}) 由网关注入
  */
 async function tick(sendFn) {
-  const { date: today, time: nowHm } = shanghaiNowParts();
+  const { date: today, time: nowHm } = tokyoNowParts();
   const all = readAll();
   const results = [];
   for (const store of Object.values(all.stores || {})) {
@@ -138,5 +145,6 @@ module.exports = {
   register,
   listStatus,
   tick,
+  tokyoNowParts,
   shanghaiNowParts,
 };

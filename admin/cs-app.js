@@ -840,7 +840,8 @@
               }
               ${
                 b.status === 'pending_confirm'
-                  ? `<button class="btn primary" data-act="confirm" data-id="${b.id}">人工确认并发邮件预览</button>`
+                  ? `<button class="btn" type="button" disabled title="请商家端确认">等待商家确认</button>
+                     <button class="btn primary" data-act="confirm" data-id="${b.id}">代商家确认</button>`
                   : ''
               }
               ${
@@ -924,7 +925,7 @@
     }
     if (result.needConfirm) {
       formErr.className = 'hint warn';
-      formErr.textContent = '已创建，状态待商家确认。请在订单列表点人工确认。';
+      formErr.textContent = '已创建，状态待商家确认。请商家端核对后确认（确认后变为蓝色预约）。';
       closeSide();
     } else {
       formErr.className = 'hint ok';
