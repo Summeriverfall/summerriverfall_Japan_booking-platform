@@ -76,8 +76,11 @@
   }
 
   function guessDurationFromCourse(course) {
-    const raw = String((course && course.name) || '');
-    const m = raw.match(/(\d+)\s*(分|分钟|min)/i);
+    if (course && Number(course.durationMinutes) > 0) {
+      return Number(course.durationMinutes);
+    }
+    const raw = TechI18n.courseLabel(course) || '';
+    const m = String(raw).match(/(\d+)\s*(分|分钟|min)/i);
     if (m) {
       const n = Number(m[1]);
       if (DURATIONS.includes(n)) return n;
@@ -237,7 +240,7 @@
       endTime,
       durationMinutes: duration,
       courseId: course.id,
-      courseName: course.name,
+      courseName: TechI18n.courseLabel(course),
     });
     if (res.ok) {
       showToast(TechI18n.t('saved'));
@@ -320,7 +323,12 @@
     } else {
       html += `<div class="meta">${where}</div>`;
     }
-    html += `<div>${TechI18n.courseLabel(course) || log.courseName || ''}</div></div>`;
+    const courseText =
+      TechI18n.courseLabel(course) ||
+      (log.courseName && typeof log.courseName === 'object'
+        ? TechI18n.courseLabel({ name: log.courseName })
+        : String(log.courseName || ''));
+    html += `<div>${courseText}</div></div>`;
     el.innerHTML = html;
 
     const actions = document.createElement('div');

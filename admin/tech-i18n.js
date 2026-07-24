@@ -138,12 +138,23 @@
   function courseLabel(course) {
     if (!course) return '';
     const lang = getLang();
-    const raw = course.name || '';
-    if (course.names && course.names[lang]) return course.names[lang];
-    const parts = String(raw).split('/').map((x) => x.trim());
-    if (lang === 'jp') return parts[0] || raw;
-    if (lang === 'cn') return parts[1] || parts[0] || raw;
-    return parts[0] || raw;
+    let base = '';
+    if (course.names && typeof course.names === 'object') {
+      base = course.names[lang] || course.names.jp || course.names.cn || course.names.en || '';
+    } else if (course.name && typeof course.name === 'object') {
+      base = course.name[lang] || course.name.jp || course.name.cn || course.name.en || '';
+    } else {
+      base = String(course.name || '');
+    }
+    if (!base) return course.id || '';
+    // "日 / 中" style fallback for string names
+    const parts = base.split('/').map((x) => x.trim()).filter(Boolean);
+    if (parts.length >= 2 && !/[a-zA-Z]{3,}/.test(parts[0])) {
+      if (lang === 'jp') return parts[0];
+      if (lang === 'cn') return parts[1] || parts[0];
+      return parts[0];
+    }
+    return base;
   }
 
   global.TechI18n = { getLang, setLang, t, techName, courseLabel, DICT };
