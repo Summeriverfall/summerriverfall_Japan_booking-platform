@@ -271,6 +271,10 @@
       } catch (err) {}
     }
 
+    let activePairGroup = null;
+    let pairGroupEl = null;
+    let pairRowsEl = null;
+
     for (let bed = 0; bed < cfg.bedCount; bed++) {
       const row = document.createElement('div');
       row.className = 'board-row';
@@ -279,16 +283,13 @@
       const name = bedLabel(bed);
       const meta = (cfg.bedLabels && cfg.bedLabels[bed]) || {};
       const pairGroup = String(meta.pairGroup || '').trim();
-      if (pairGroup || meta.typeId === 'pair') {
+      const isPair = Boolean(pairGroup || meta.typeId === 'pair');
+      if (isPair) {
         row.classList.add('is-pair-row');
         label.classList.add('is-pair-half');
         const seats = (cfg.bedLabels || [])
           .map((lab, idx) => ({ lab, idx }))
-          .filter(
-            (x) =>
-              String((x.lab && x.lab.pairGroup) || '').trim() === pairGroup ||
-              (!pairGroup && x.lab && x.lab.typeId === 'pair' && x.idx === bed)
-          )
+          .filter((x) => String((x.lab && x.lab.pairGroup) || '').trim() === pairGroup)
           .map((x) => x.idx);
         if (seats[0] === bed) {
           row.classList.add('is-pair-first');
@@ -563,7 +564,34 @@
 
       row.appendChild(label);
       row.appendChild(track);
-      wrap.appendChild(row);
+
+      if (isPair && pairGroup) {
+        if (activePairGroup !== pairGroup) {
+          activePairGroup = pairGroup;
+          pairGroupEl = document.createElement('div');
+          pairGroupEl.className = 'board-pair-group';
+          pairGroupEl.dataset.pairGroup = pairGroup;
+          const brace = document.createElement('div');
+          brace.className = 'board-pair-brace';
+          brace.setAttribute('aria-hidden', 'true');
+          pairRowsEl = document.createElement('div');
+          pairRowsEl.className = 'board-pair-rows';
+          pairGroupEl.appendChild(brace);
+          pairGroupEl.appendChild(pairRowsEl);
+          wrap.appendChild(pairGroupEl);
+        }
+        pairRowsEl.appendChild(row);
+        if (row.classList.contains('is-pair-last')) {
+          activePairGroup = null;
+          pairGroupEl = null;
+          pairRowsEl = null;
+        }
+      } else {
+        activePairGroup = null;
+        pairGroupEl = null;
+        pairRowsEl = null;
+        wrap.appendChild(row);
+      }
     }
 
     function startBlockEdit(block, mode, e, kind) {

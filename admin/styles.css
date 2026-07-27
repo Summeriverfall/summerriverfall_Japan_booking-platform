@@ -182,18 +182,37 @@ a:hover { text-decoration: underline; }
   line-height: 1.2;
   text-align: center;
 }
+/* 双人床两行：左侧括号扣住，表示同一张床 */
+.board-pair-group {
+  position: relative;
+  display: block;
+}
+.board-pair-brace {
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  bottom: 5px;
+  width: 11px;
+  border: 2.5px solid #6b5344;
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  pointer-events: none;
+  z-index: 3;
+  box-sizing: border-box;
+}
+.board-pair-rows {
+  min-width: 0;
+}
 .board-row.is-pair-row .board-label,
 .board-label.is-pair-half {
-  border-left: 3px solid #8b6f5c;
-  background: linear-gradient(90deg, rgba(139,111,92,.14), transparent 70%);
+  padding-left: .85rem;
+  background: linear-gradient(90deg, rgba(139,111,92,.1), transparent 55%);
 }
-.board-row.is-pair-first .board-label { border-top-left-radius: 8px; }
-.board-row.is-pair-last .board-label { border-bottom-left-radius: 8px; }
 .board-row.is-pair-first .board-track {
-  box-shadow: inset 0 1px 0 rgba(139,111,92,.28);
+  box-shadow: inset 0 1px 0 rgba(139,111,92,.22);
 }
 .board-row.is-pair-last .board-track {
-  box-shadow: inset 0 -1px 0 rgba(139,111,92,.28);
+  box-shadow: inset 0 -1px 0 rgba(139,111,92,.22);
 }
 .board-day-btns {
   display: grid;
@@ -833,6 +852,26 @@ a:hover { text-decoration: underline; }
     display: flex;
     align-items: stretch;
     border-bottom: 1px solid var(--line);
+  }
+  .m-tl-pair-group {
+    position: relative;
+  }
+  .m-tl-pair-brace {
+    position: absolute;
+    left: 2px;
+    top: 4px;
+    bottom: 4px;
+    width: 9px;
+    border: 2.5px solid #6b5344;
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+    pointer-events: none;
+    z-index: 4;
+    box-sizing: border-box;
+  }
+  .m-tl-pair-rows .m-tl-label-wrap {
+    padding-left: .45rem;
+    background: linear-gradient(90deg, rgba(139,111,92,.1), #fffcf8 60%);
   }
   .m-tl-row:last-child { border-bottom: none; }
   .m-tl-label-wrap {

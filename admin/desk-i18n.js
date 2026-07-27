@@ -136,7 +136,8 @@
       coursesLabel: '予約コース（1行1件：「id|名称」または名称のみ）',
       resCount: 'リソース数',
       resNames: 'リソース名（編集可）',
-      resTypeHint: '名称を編集し、種類を選択。ダブルは連続2行にし、表では「C（双）」「D（双）」と並び表示（実体は1台）。',
+      resTypeHint:
+        '名称を編集し、種類を選択。ダブルは連続2行にし、「床位1(双)」「床位2(双)」のように並び、左の括弧で1台としてまとめます。',
       resNamePh: '名称（例：A / C）',
       resType: '種類',
     },
@@ -268,7 +269,7 @@
       resCount: '资源数量',
       resNames: '资源名称（可编辑）',
       resTypeHint:
-        '可改名称并选类型。双人床请连续占两行，时间表会并列显示为「C（双）」「D（双）」（实为一张双人床）。',
+        '可改名称并选类型。双人床请连续占两行，显示为「床位1(双)」「床位2(双)」，左侧括号扣住表示实为一张。',
       resNamePh: '名称（如 A / C）',
       resType: '类型',
     },
@@ -400,7 +401,7 @@
       resCount: 'Resource count',
       resNames: 'Resource names (editable)',
       resTypeHint:
-        'Edit the name and pick a type. For a double bed use two consecutive rows; the board shows “C (Dbl)” and “D (Dbl)” side by side (one physical bed).',
+        'Edit the name and pick a type. For a double bed use two consecutive rows like “Bed 1(Dbl)” / “Bed 2(Dbl)”, grouped by a left brace.',
       resNamePh: 'Name (e.g. A / C)',
       resType: 'Type',
     },
@@ -472,7 +473,7 @@
         String(raw.pairGroup || '').trim() ||
         /ペア|双人|Double|Pair/i.test(String(raw.jp || raw.cn || '')));
     if (isPair) {
-      const mark = getLang() === 'en' ? ' (Dbl)' : '（双）';
+      const mark = getLang() === 'en' ? '(Dbl)' : '(双)';
       if (!/[（(]\s*(双|Dbl|Pair|ペア)/i.test(base)) base += mark;
     }
     return base;

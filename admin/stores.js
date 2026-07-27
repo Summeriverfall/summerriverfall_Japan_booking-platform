@@ -155,12 +155,26 @@
       hoursLabel: '11:00 – 24:00',
       slotMinutes: 30,
       bedCount: 4,
-      /** A/B 单人；C/D 为同一张双人床的两行（并列显示） */
+      /** A/B 单人；床位1/2 为同一张双人床的两行（左侧括号扣住） */
       bedLabels: [
         { typeId: 'single', jp: 'A', cn: 'A', en: 'A' },
         { typeId: 'single', jp: 'B', cn: 'B', en: 'B' },
-        { typeId: 'pair', pairGroup: 'luna-pair', pairSeat: 1, jp: 'C', cn: 'C', en: 'C' },
-        { typeId: 'pair', pairGroup: 'luna-pair', pairSeat: 2, jp: 'D', cn: 'D', en: 'D' },
+        {
+          typeId: 'pair',
+          pairGroup: 'luna-pair',
+          pairSeat: 1,
+          jp: '床位1',
+          cn: '床位1',
+          en: 'Bed 1',
+        },
+        {
+          typeId: 'pair',
+          pairGroup: 'luna-pair',
+          pairSeat: 2,
+          jp: '床位2',
+          cn: '床位2',
+          en: 'Bed 2',
+        },
       ],
       confirmGuestsThreshold: 2,
       /** 对照 d:/Work/Project/luna 官网价目校准 */

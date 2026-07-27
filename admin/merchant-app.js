@@ -804,6 +804,7 @@
         <div class="m-tl-hours">${hoursHtml}</div>
       </div>`;
 
+    let openPair = '';
     for (let bed = 0; bed < STORE_CONFIG.bedCount; bed++) {
       let cells = '';
       for (let i = 0; i < slots; i++) {
@@ -827,7 +828,24 @@
       }
       const label = DeskI18n.bedLabelAt(bed);
       const dayClosed = BookingStore.hasDayClosureForBed(date, bed);
-      rows += `<div class="m-tl-row">
+      const meta = (STORE_CONFIG.bedLabels && STORE_CONFIG.bedLabels[bed]) || {};
+      const pairGroup = String(meta.pairGroup || '').trim();
+      const seats = pairGroup
+        ? (STORE_CONFIG.bedLabels || [])
+            .map((lab, idx) => ({ lab, idx }))
+            .filter((x) => String((x.lab && x.lab.pairGroup) || '').trim() === pairGroup)
+            .map((x) => x.idx)
+        : [];
+      const isPairFirst = pairGroup && seats[0] === bed;
+      const isPairLast = pairGroup && seats[seats.length - 1] === bed;
+      if (isPairFirst) {
+        rows += `<div class="m-tl-pair-group"><div class="m-tl-pair-brace" aria-hidden="true"></div><div class="m-tl-pair-rows">`;
+        openPair = pairGroup;
+      }
+      const pairCls = pairGroup
+        ? ` is-pair-row${isPairFirst ? ' is-pair-first' : ''}${isPairLast ? ' is-pair-last' : ''}`
+        : '';
+      rows += `<div class="m-tl-row${pairCls}">
         <div class="m-tl-label-wrap">
           <div class="m-tl-label-name">${label}</div>
           <div class="m-tl-day-btns">
@@ -841,6 +859,10 @@
         </div>
         <div class="m-tl-track">${cells}</div>
       </div>`;
+      if (isPairLast && openPair) {
+        rows += `</div></div>`;
+        openPair = '';
+      }
     }
 
     mTimeline.innerHTML = `<div class="m-timeline-scroll"><div class="m-timeline-inner">${rows}</div></div>`;
