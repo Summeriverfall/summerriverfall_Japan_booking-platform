@@ -154,28 +154,14 @@
       closeMinute: 0,
       hoursLabel: '11:00 – 24:00',
       slotMinutes: 30,
-      /** 真实配置：3 单 + 1 双（双人占两行，左侧括号扣住）→ 看板共 5 行 */
+      /** 真实配置：3 单人房 + 2 双人房（各自独立可约，不成对绑定） */
       bedCount: 5,
       bedLabels: [
-        { typeId: 'single', jp: '床位1', cn: '床位1', en: 'Bed 1' },
-        { typeId: 'single', jp: '床位2', cn: '床位2', en: 'Bed 2' },
-        { typeId: 'single', jp: '床位3', cn: '床位3', en: 'Bed 3' },
-        {
-          typeId: 'pair',
-          pairGroup: 'luna-pair',
-          pairSeat: 1,
-          jp: '床位4',
-          cn: '床位4',
-          en: 'Bed 4',
-        },
-        {
-          typeId: 'pair',
-          pairGroup: 'luna-pair',
-          pairSeat: 2,
-          jp: '床位5',
-          cn: '床位5',
-          en: 'Bed 5',
-        },
+        { typeId: 'single', jp: 'シングル1', cn: '单人房1', en: 'Single 1' },
+        { typeId: 'single', jp: 'シングル2', cn: '单人房2', en: 'Single 2' },
+        { typeId: 'single', jp: 'シングル3', cn: '单人房3', en: 'Single 3' },
+        { typeId: 'pair', jp: 'ペア1', cn: '双人房1', en: 'Double 1' },
+        { typeId: 'pair', jp: 'ペア2', cn: '双人房2', en: 'Double 2' },
       ],
       confirmGuestsThreshold: 2,
       /** 对照 d:/Work/Project/luna 官网价目校准 */
@@ -308,52 +294,29 @@
     return hit ? hit.id : '';
   }
 
-  /** 双人房占两行：选中/关房时把同 pairGroup 的行一并纳入 */
-  function expandBedIndexes(store, bedIndexes) {
-    const labels = (store && store.bedLabels) || [];
+  /** 资源各自独立；双人房类型仅作分类，选中/关房不再成对绑定 */
+  function expandBedIndexes(_store, bedIndexes) {
     const set = new Set((bedIndexes || []).map((n) => Number(n)).filter((n) => Number.isFinite(n)));
-    const groups = new Set();
-    set.forEach((idx) => {
-      const g = String((labels[idx] && labels[idx].pairGroup) || '').trim();
-      if (g) groups.add(g);
-    });
-    if (!groups.size) return Array.from(set).sort((a, b) => a - b);
-    labels.forEach((lab, idx) => {
-      const g = String((lab && lab.pairGroup) || '').trim();
-      if (g && groups.has(g)) set.add(idx);
-    });
     return Array.from(set).sort((a, b) => a - b);
   }
 
-  function assignPairGroups(storeId, labels) {
+  function assignPairGroups(_storeId, labels) {
     const out = [];
     for (let i = 0; i < labels.length; i += 1) {
       const n = normalizeBedLabel(labels[i], i);
       const typeId = String(n.typeId || matchResourceTypeId(n) || '').trim();
-      let pairGroup = '';
-      let pairSeat = 0;
-      if (typeId === 'pair') {
-        const prev = i > 0 ? out[i - 1] : null;
-        if (prev && prev.typeId === 'pair' && prev.pairGroup) {
-          pairGroup = prev.pairGroup;
-          pairSeat = Number(prev.pairSeat || 1) + 1;
-        } else {
-          pairGroup = String(n.pairGroup || `pair-${storeId}-${i}`).trim();
-          pairSeat = 1;
-        }
-      }
       const fromType = findResourceTypeById(typeId);
       const customJp = String(n.jp || '').trim();
       const customCn = String(n.cn || '').trim();
       const customEn = String(n.en || '').trim();
-      // 保留自定义名称；未填时才回落到类型默认名
+      // 保留自定义名称；未填时才回落到类型默认名。双人房不再写入 pairGroup。
       out.push({
         jp: customJp || (fromType && fromType.jp) || `R${i + 1}`,
         cn: customCn || customJp || (fromType && fromType.cn) || `R${i + 1}`,
         en: customEn || customJp || (fromType && fromType.en) || `R${i + 1}`,
         typeId,
-        pairGroup,
-        pairSeat,
+        pairGroup: '',
+        pairSeat: 0,
       });
     }
     return out;

@@ -137,8 +137,8 @@
       resCount: 'リソース数',
       resNames: 'リソース名（編集可）',
       resTypeHint:
-        '名称を編集し、種類を選択。ダブルは連続2行にし、「床位1(双)」「床位2(双)」のように並び、左の括弧で1台としてまとめます。',
-      resNamePh: '名称（例：A / C）',
+        '名称を編集し、種類（シングル / ペア / VIP）を選択。各リソースは独立して予約できます。',
+      resNamePh: '名称（例：シングル1）',
       resType: '種類',
     },
     cn: {
@@ -268,9 +268,8 @@
       coursesLabel: '预约项目（每行一项：可写「id|名称」或仅名称）',
       resCount: '资源数量',
       resNames: '资源名称（可编辑）',
-      resTypeHint:
-        '可改名称并选类型。双人床请连续占两行，显示为「床位1(双)」「床位2(双)」，左侧括号扣住表示实为一张。',
-      resNamePh: '名称（如 A / C）',
+      resTypeHint: '可改名称并选类型（单人房 / 双人房 / VIP）。每个资源独立预约，双人房之间不绑定。',
+      resNamePh: '名称（如 单人房1）',
       resType: '类型',
     },
     en: {
@@ -401,8 +400,8 @@
       resCount: 'Resource count',
       resNames: 'Resource names (editable)',
       resTypeHint:
-        'Edit the name and pick a type. For a double bed use two consecutive rows like “Bed 1(Dbl)” / “Bed 2(Dbl)”, grouped by a left brace.',
-      resNamePh: 'Name (e.g. A / C)',
+        'Edit the name and pick a type (Single / Double / VIP). Each resource books independently; double rooms are not paired.',
+      resNamePh: 'Name (e.g. Single 1)',
       resType: 'Type',
     },
   };
@@ -466,17 +465,7 @@
   function bedLabelAt(index) {
     const cfg = global.STORE_CONFIG || {};
     const raw = (cfg.bedLabels || [])[index];
-    let base = resourceLabel(raw, index);
-    const isPair =
-      raw &&
-      (raw.typeId === 'pair' ||
-        String(raw.pairGroup || '').trim() ||
-        /ペア|双人|Double|Pair/i.test(String(raw.jp || raw.cn || '')));
-    if (isPair) {
-      const mark = getLang() === 'en' ? '(Dbl)' : '(双)';
-      if (!/[（(]\s*(双|Dbl|Pair|ペア)/i.test(base)) base += mark;
-    }
-    return base;
+    return resourceLabel(raw, index);
   }
 
   function courseLabel(course) {
