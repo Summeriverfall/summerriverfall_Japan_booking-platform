@@ -182,6 +182,19 @@ a:hover { text-decoration: underline; }
   line-height: 1.2;
   text-align: center;
 }
+.board-row.is-pair-row .board-label,
+.board-label.is-pair-half {
+  border-left: 3px solid #8b6f5c;
+  background: linear-gradient(90deg, rgba(139,111,92,.14), transparent 70%);
+}
+.board-row.is-pair-first .board-label { border-top-left-radius: 8px; }
+.board-row.is-pair-last .board-label { border-bottom-left-radius: 8px; }
+.board-row.is-pair-first .board-track {
+  box-shadow: inset 0 1px 0 rgba(139,111,92,.28);
+}
+.board-row.is-pair-last .board-track {
+  box-shadow: inset 0 -1px 0 rgba(139,111,92,.28);
+}
 .board-day-btns {
   display: grid;
   grid-template-columns: 1fr 1fr;

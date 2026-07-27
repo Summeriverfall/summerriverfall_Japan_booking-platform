@@ -277,6 +277,28 @@
       const label = document.createElement('div');
       label.className = 'board-label';
       const name = bedLabel(bed);
+      const meta = (cfg.bedLabels && cfg.bedLabels[bed]) || {};
+      const pairGroup = String(meta.pairGroup || '').trim();
+      if (pairGroup || meta.typeId === 'pair') {
+        row.classList.add('is-pair-row');
+        label.classList.add('is-pair-half');
+        const seats = (cfg.bedLabels || [])
+          .map((lab, idx) => ({ lab, idx }))
+          .filter(
+            (x) =>
+              String((x.lab && x.lab.pairGroup) || '').trim() === pairGroup ||
+              (!pairGroup && x.lab && x.lab.typeId === 'pair' && x.idx === bed)
+          )
+          .map((x) => x.idx);
+        if (seats[0] === bed) {
+          row.classList.add('is-pair-first');
+          label.classList.add('is-pair-first');
+        }
+        if (seats[seats.length - 1] === bed) {
+          row.classList.add('is-pair-last');
+          label.classList.add('is-pair-last');
+        }
+      }
 
       if (opts.bedDayControls) {
         label.classList.add('has-day-controls');

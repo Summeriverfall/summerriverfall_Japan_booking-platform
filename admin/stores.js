@@ -154,14 +154,13 @@
       closeMinute: 0,
       hoursLabel: '11:00 – 24:00',
       slotMinutes: 30,
-      bedCount: 5,
-      /** 3 间单人房 + 1 间双人房（双人房占时间表连续两行） */
+      bedCount: 4,
+      /** A/B 单人；C/D 为同一张双人床的两行（并列显示） */
       bedLabels: [
-        { typeId: 'single', jp: 'シングル①', cn: '单人房①', en: 'Single 1' },
-        { typeId: 'single', jp: 'シングル②', cn: '单人房②', en: 'Single 2' },
-        { typeId: 'single', jp: 'シングル③', cn: '单人房③', en: 'Single 3' },
-        { typeId: 'pair', pairGroup: 'luna-pair', jp: 'ペアルーム', cn: '双人房', en: 'Pair room' },
-        { typeId: 'pair', pairGroup: 'luna-pair', jp: 'ペアルーム', cn: '双人房', en: 'Pair room' },
+        { typeId: 'single', jp: 'A', cn: 'A', en: 'A' },
+        { typeId: 'single', jp: 'B', cn: 'B', en: 'B' },
+        { typeId: 'pair', pairGroup: 'luna-pair', pairSeat: 1, jp: 'C', cn: 'C', en: 'C' },
+        { typeId: 'pair', pairGroup: 'luna-pair', pairSeat: 2, jp: 'D', cn: 'D', en: 'D' },
       ],
       confirmGuestsThreshold: 2,
       /** 对照 d:/Work/Project/luna 官网价目校准 */
@@ -317,24 +316,41 @@
       const n = normalizeBedLabel(labels[i], i);
       const typeId = String(n.typeId || matchResourceTypeId(n) || '').trim();
       let pairGroup = '';
+      let pairSeat = 0;
       if (typeId === 'pair') {
         const prev = i > 0 ? out[i - 1] : null;
         if (prev && prev.typeId === 'pair' && prev.pairGroup) {
           pairGroup = prev.pairGroup;
+          pairSeat = Number(prev.pairSeat || 1) + 1;
         } else {
           pairGroup = String(n.pairGroup || `pair-${storeId}-${i}`).trim();
+          pairSeat = 1;
         }
       }
       const fromType = findResourceTypeById(typeId);
+      const customJp = String(n.jp || '').trim();
+      const customCn = String(n.cn || '').trim();
+      const customEn = String(n.en || '').trim();
+      // 保留自定义名称；未填时才回落到类型默认名
       out.push({
-        jp: n.jp || (fromType && fromType.jp) || `R${i + 1}`,
-        cn: n.cn || (fromType && fromType.cn) || n.jp || `R${i + 1}`,
-        en: n.en || (fromType && fromType.en) || n.jp || `R${i + 1}`,
+        jp: customJp || (fromType && fromType.jp) || `R${i + 1}`,
+        cn: customCn || customJp || (fromType && fromType.cn) || `R${i + 1}`,
+        en: customEn || customJp || (fromType && fromType.en) || `R${i + 1}`,
         typeId,
         pairGroup,
+        pairSeat,
       });
     }
     return out;
+  }
+
+  function normalizeStoreResources(store) {
+    if (!store) return null;
+    const labels = assignPairGroups(store.storeId, store.bedLabels || []);
+    return Object.assign({}, store, {
+      bedLabels: labels,
+      bedCount: labels.length || store.bedCount || 0,
+    });
   }
 
   function setResourceOverride(storeId, patch) {
@@ -395,15 +411,17 @@
   function withResourceOverride(store) {
     if (!store) return null;
     const ov = getResourceOverride(store.storeId);
-    if (!ov) return store;
-    const merged = Object.assign({}, store, {
-      bedCount: ov.bedCount != null ? ov.bedCount : store.bedCount,
-      bedLabels: ov.bedLabels ? ov.bedLabels.slice() : store.bedLabels.slice(),
-    });
-    if (Array.isArray(ov.courses) && ov.courses.length) {
-      merged.courses = ov.courses.map((c) => Object.assign({}, c));
+    let merged = store;
+    if (ov) {
+      merged = Object.assign({}, store, {
+        bedCount: ov.bedCount != null ? ov.bedCount : store.bedCount,
+        bedLabels: ov.bedLabels ? ov.bedLabels.slice() : (store.bedLabels || []).slice(),
+      });
+      if (Array.isArray(ov.courses) && ov.courses.length) {
+        merged.courses = ov.courses.map((c) => Object.assign({}, c));
+      }
     }
-    return merged;
+    return normalizeStoreResources(merged);
   }
 
   function listStores() {

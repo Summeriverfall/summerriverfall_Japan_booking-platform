@@ -779,7 +779,9 @@
         selectedBookingId = null;
         selectedClosureId = null;
         setSideMode('booking');
-        const beds = range.bedIndexes || [range.bedIndex];
+        const beds = StoreRegistry.expandBedIndexes
+          ? StoreRegistry.expandBedIndexes(STORE_CONFIG, range.bedIndexes || [range.bedIndex])
+          : range.bedIndexes || [range.bedIndex];
         rangeSelection = {
           bedIndex: beds[0],
           bedIndexes: beds,
@@ -788,7 +790,7 @@
         };
         document.getElementById('startTime').value = range.startTime;
         document.getElementById('duration').value = String(range.durationMinutes);
-        document.getElementById('guests').value = String(range.guests || beds.length);
+        document.getElementById('guests').value = String(Math.max(range.guests || 1, beds.length));
         document.getElementById('channel').value = 'whatsapp';
         renderSideBeds(beds);
         const names = beds.map((i) => DeskI18n.bedLabelAt(i)).join('、');
