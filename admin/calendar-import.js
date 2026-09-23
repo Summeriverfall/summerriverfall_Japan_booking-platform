@@ -152,7 +152,24 @@
     return Boolean(document.querySelector('.board.is-dragging, .board.is-editing-block'));
   }
 
+  function isLocalBoard() {
+    const host = String((location && location.hostname) || '');
+    return host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+  }
+
+  function pagesPreviewStatus() {
+    const text =
+      global.DeskI18n && DeskI18n.t
+        ? DeskI18n.t('calPagesHint')
+        : '在线预览不同步店家日历，只测界面。要看真预约请在本机打开看板。';
+    return { ok: true, mode: 'pages-preview', hint: text };
+  }
+
   async function pullOnce(getDate, onStatus) {
+    if (!isLocalBoard()) {
+      if (onStatus) onStatus(pagesPreviewStatus());
+      return;
+    }
     if (inFlight || isBusy()) return;
     inFlight = true;
     try {
@@ -180,6 +197,10 @@
     const onStatus = opts.onStatus;
     const intervalMs = Number(opts.intervalMs) || 30000;
     stopAutoSync();
+    if (!isLocalBoard()) {
+      if (onStatus) onStatus(pagesPreviewStatus());
+      return;
+    }
     pullOnce(getDate, onStatus);
     autoTimer = setInterval(() => {
       pullOnce(getDate, onStatus);
@@ -199,6 +220,9 @@
 
   function statusText(result) {
     if (!result) return '';
+    if (result.mode === 'pages-preview') {
+      return result.hint || pagesPreviewStatus().hint;
+    }
     if (!result.ok) {
       return `日历未同步：${result.error || '网关不可用'}（须本机打开看板）`;
     }
