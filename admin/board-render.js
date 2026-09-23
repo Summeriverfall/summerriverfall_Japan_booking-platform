@@ -79,7 +79,9 @@
 
     const head = document.createElement('div');
     head.className = 'board-head';
-    head.innerHTML = `<div class="board-corner">资源</div><div class="board-hours"></div>`;
+    const noun =
+      global.DeskI18n && DeskI18n.resourceNoun ? DeskI18n.resourceNoun() : '床位';
+    head.innerHTML = `<div class="board-corner">${noun}</div><div class="board-hours"></div>`;
     const hoursEl = head.querySelector('.board-hours');
     const hourCells = [];
     slotMeta.forEach((slot, idx) => {
@@ -394,6 +396,9 @@
         .forEach((x) => {
           const block = document.createElement('div');
           block.className = `board-block type-${x.type}`;
+          if (x.ref && x.ref.calendarIssues && x.ref.calendarIssues.length) {
+            block.classList.add('is-cal-issue');
+          }
           block.style.left = `${(x.start / span) * 100}%`;
           block.style.width = `${((x.end - x.start) / span) * 100}%`;
           const isClosure =
@@ -409,7 +414,9 @@
               : `关闭 ${x.startTime}-${x.endTime}`
             : x.type === 'hold'
               ? `预占 ${x.startTime}-${x.endTime}`
-              : `${guestLabel || '预约'} ${x.startTime} · ${x.ref.guests || 1}人`;
+              : `${guestLabel || '预约'} ${x.startTime} · ${x.ref.guests || 1}人${
+                  x.ref.calendarIssues && x.ref.calendarIssues.length ? ' · 日历异常' : ''
+                }`;
           block.title = title;
           const labelEl = document.createElement('span');
           labelEl.className = 'board-block-label';

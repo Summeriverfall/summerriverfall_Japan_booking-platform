@@ -6,7 +6,7 @@ const calendar = require('./calendar');
 
 const STORES = [
   { storeId: 'runana', name: 'Ruana', colorId: '6' }, // 橘
-  { storeId: 'starryflow', name: 'Starry Flow Spa', colorId: '9' }, // 蓝紫
+  // Starry / Flora 用店家共享日历，不要再新建同名测试日历
 ];
 
 (async () => {

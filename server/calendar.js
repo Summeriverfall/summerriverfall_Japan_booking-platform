@@ -22,7 +22,7 @@ function canConnect(port, host = '127.0.0.1') {
 
 async function ensureProxy() {
   if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) return;
-  const candidates = [7897, 7890, 10809, 10808];
+  const candidates = [7897, 7890, 7891, 10809, 10808, 1080, 6152, 20171];
   for (const port of candidates) {
     // eslint-disable-next-line no-await-in-loop
     if (await canConnect(port)) {
@@ -33,9 +33,8 @@ async function ensureProxy() {
       return;
     }
   }
+  console.warn('[calendar] 未检测到本机代理，直连 Google 可能超时');
 }
-
-ensureProxy().catch(() => {});
 
 function getOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID || '';
@@ -53,7 +52,8 @@ function isConfigured() {
   return Boolean(getOAuthClient());
 }
 
-function calendarApi() {
+async function getCalendarApi() {
+  await ensureProxy();
   const auth = getOAuthClient();
   if (!auth) {
     const err = new Error(
@@ -66,7 +66,7 @@ function calendarApi() {
 }
 
 async function listCalendars() {
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   const res = await cal.calendarList.list({ maxResults: 250 });
   return (res.data.items || []).map((c) => ({
     id: c.id,
@@ -107,7 +107,7 @@ function buildEventBody(input) {
 
 /** 列出某日历在时间窗内的事件（含扩展属性） */
 async function listEventsInRange(calendarId, timeMin, timeMax) {
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   const items = [];
   let pageToken;
   do {
@@ -147,7 +147,7 @@ function isPlatformEvent(ev) {
  */
 async function findEventsForBooking(calendarId, bookingId, aroundDateTime) {
   if (!bookingId) return [];
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
 
   // 1) 扩展属性精确查
   try {
@@ -175,7 +175,7 @@ async function findEventsForBooking(calendarId, bookingId, aroundDateTime) {
  * 创建或更新；同一 bookingId 只保留一条，多余删除
  */
 async function upsertEvent(input) {
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   const calendarId = input.calendarId || 'primary';
   const body = buildEventBody(input);
   const bookingId = input.bookingId || '';
@@ -235,7 +235,7 @@ async function upsertEvent(input) {
 }
 
 async function deleteEvent(calendarId, eventId) {
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   await cal.events.delete({
     calendarId: calendarId || 'primary',
     eventId,
@@ -248,7 +248,7 @@ async function deleteEvent(calendarId, eventId) {
  */
 async function deleteByBookingId(calendarId, bookingId, aroundDateTime) {
   const list = await findEventsForBooking(calendarId, bookingId, aroundDateTime);
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   let removed = 0;
   for (const ev of list) {
     try {
@@ -262,26 +262,23 @@ async function deleteByBookingId(calendarId, bookingId, aroundDateTime) {
   return { ok: true, removed };
 }
 
+function isPlatformEvent(ev) {
+  const priv = (ev && ev.extendedProperties && ev.extendedProperties.private) || {};
+  return String(priv.source || '') === PLATFORM_SOURCE || Boolean(priv.bookingId);
+}
+
 /**
- * 清空某日该日历上的全部事件。
- * Ruana / Starry 等为平台专用日历，同步策略是「整日重写」，避免重复堆叠。
+ * 只清空某日「本平台写入」的事件。共享店日历上的店家原事件一律不删。
  */
 async function cleanupPlatformDay(calendarId, dateStr) {
-  const timeMin = `${dateStr}T00:00:00+08:00`;
-  const timeMax = `${dateStr}T23:59:59+08:00`;
-  // 再扩一点，避免跨时区漏删
   const timeMinWide = `${dateStr}T00:00:00Z`;
   const next = addDaysYmd(dateStr, 1);
   const timeMaxWide = `${next}T00:00:00Z`;
   const items = await listEventsInRange(calendarId, timeMinWide, timeMaxWide);
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   let removed = 0;
   for (const ev of items) {
-    // 只删落在该营业日附近的定时事件
-    const start = (ev.start && (ev.start.dateTime || ev.start.date)) || '';
-    if (start && !String(start).startsWith(dateStr) && !String(start).includes(dateStr)) {
-      // dateTime may be previous day UTC for +08 morning; still delete if in window
-    }
+    if (!isPlatformEvent(ev)) continue;
     try {
       // eslint-disable-next-line no-await-in-loop
       await cal.events.delete({ calendarId, eventId: ev.id });
@@ -291,6 +288,12 @@ async function cleanupPlatformDay(calendarId, dateStr) {
     }
   }
   return { ok: true, removed };
+}
+
+async function deleteCalendar(calendarId) {
+  const cal = await getCalendarApi();
+  await cal.calendars.delete({ calendarId });
+  return { ok: true };
 }
 
 function addDaysYmd(dateStr, days) {
@@ -308,7 +311,7 @@ function addDaysYmd(dateStr, days) {
  */
 async function rewriteDay(calendarId, dateStr, events) {
   const cleaned = await cleanupPlatformDay(calendarId, dateStr);
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   const written = [];
   for (const ev of events || []) {
     const body = buildEventBody(Object.assign({}, ev, { calendarId }));
@@ -334,7 +337,7 @@ async function rewriteDay(calendarId, dateStr, events) {
 }
 
 async function ensureNamedCalendar(summary, colorId) {
-  const cal = calendarApi();
+  const cal = await getCalendarApi();
   const list = await cal.calendarList.list({ maxResults: 250 });
   let existing = (list.data.items || []).find(
     (c) => String(c.summary || '').trim() === String(summary).trim()
@@ -377,11 +380,13 @@ async function ensureNamedCalendar(summary, colorId) {
 module.exports = {
   isConfigured,
   listCalendars,
+  listEventsInRange,
   upsertEvent,
   deleteEvent,
   deleteByBookingId,
   cleanupPlatformDay,
   rewriteDay,
+  deleteCalendar,
   ensureNamedCalendar,
   PLATFORM_SOURCE,
 };

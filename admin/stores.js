@@ -1,6 +1,6 @@
 /**
  * 多门店注册表（功能测试 · 无真实后端）
- * 测试店：Relaxation Ruana、Starry Flow Spa、Luna spa 河原町店
+ * 测试店：Relaxation Ruana、Starry Flow Spa、Luna spa 河原町店、Flora SPA
  */
 (function (global) {
   const STORES = [
@@ -22,6 +22,7 @@
       hoursLabel: '11:00 – 21:30',
       slotMinutes: 30,
       bedCount: 5,
+      resourceNoun: { jp: 'ベッド', cn: '床位', en: 'Beds' },
       bedLabels: [
         { jp: 'オイルルーム①', cn: '精油房①', en: 'Oil room 1' },
         { jp: 'オイルルーム②', cn: '精油房②', en: 'Oil room 2' },
@@ -87,6 +88,7 @@
       hoursLabel: '12:00 – 次日 02:00',
       slotMinutes: 30,
       bedCount: 5,
+      resourceNoun: { jp: 'ベッド', cn: '床位', en: 'Beds' },
       bedLabels: [
         { jp: 'スパルームA', cn: '水疗室A', en: 'Spa room A' },
         { jp: 'スパルームB', cn: '水疗室B', en: 'Spa room B' },
@@ -123,8 +125,9 @@
       merchantEmail: '1161132533@qq.com',
       emailSubjectPrefix: '[Starry Flow预约]',
       dailyEmailTime: '00:00',
-      googleCalendarId: '3d2196ef12eb39bff5295bf771a252e75ad6691e5253c65380e1be88cbfc5501@group.calendar.google.com',
-      googleCalendarName: 'Starry Flow Spa',
+      googleCalendarId: '3068cca264852c7503af72c708bf996b6cb1c3b66a3538715db2d7566b0337ca@group.calendar.google.com',
+      googleCalendarName: 'StarryFlow spa',
+      googleCalendarShared: true,
       timeZone: 'Asia/Tokyo',
       googleWriteTimeZone: 'Asia/Shanghai',
       storageKey: 'booking-platform-starryflow-v1',
@@ -156,6 +159,7 @@
       slotMinutes: 30,
       /** 真实配置：3 单人房 + 2 双人房（各自独立可约，不成对绑定） */
       bedCount: 5,
+      resourceNoun: { jp: 'ベッド', cn: '床位', en: 'Beds' },
       bedLabels: [
         { typeId: 'single', jp: 'シングル1', cn: '单人房1', en: 'Single 1' },
         { typeId: 'single', jp: 'シングル2', cn: '单人房2', en: 'Single 2' },
@@ -208,6 +212,66 @@
         { id: 'luna-d', code: 'L4', name: { jp: '咲良', en: 'Sakura', cn: '咲良' } },
       ],
       techWorkKey: 'tech-work-luna-v1',
+    },
+    {
+      storeId: 'floraspa',
+      storeName: {
+        jp: 'Flora SPA',
+        en: 'Flora SPA',
+        cn: 'Flora SPA',
+      },
+      tagline: '测试店',
+      address: '',
+      accent: '#6b8f71',
+      overnight: false,
+      openHour: 11,
+      openMinute: 0,
+      closeHour: 22,
+      closeMinute: 0,
+      hoursLabel: '11:00 – 22:00',
+      slotMinutes: 30,
+      bedCount: 5,
+      resourceNoun: { jp: 'ベッド', cn: '床位', en: 'Beds' },
+      bedLabels: [
+        { jp: 'ベッド1', cn: '床位1', en: 'Bed 1' },
+        { jp: 'ベッド2', cn: '床位2', en: 'Bed 2' },
+        { jp: 'ベッド3', cn: '床位3', en: 'Bed 3' },
+        { jp: 'ベッド4', cn: '床位4', en: 'Bed 4' },
+        { jp: 'ベッド5', cn: '床位5', en: 'Bed 5' },
+      ],
+      confirmGuestsThreshold: 2,
+      courses: [
+        { id: 'oil-60', name: 'オイルトリートメント 60分 / 精油护理 60分钟' },
+        { id: 'oil-90', name: 'オイルトリートメント 90分 / 精油护理 90分钟' },
+        { id: 'body-60', name: 'ボディマッサージ 60分 / 身体按摩 60分钟' },
+        { id: 'body-90', name: 'ボディマッサージ 90分 / 身体按摩 90分钟' },
+        { id: 'head-45', name: 'ヘッドスパ 45分 / 头部水疗 45分钟' },
+        { id: 'foot-30', name: 'フットケア 30分 / 足部护理 30分钟' },
+      ],
+      channels: [
+        { id: 'whatsapp', name: 'WhatsApp' },
+        { id: 'phone', name: '电话' },
+        { id: 'line', name: 'LINE' },
+        { id: 'walkin', name: '到店/线下' },
+        { id: 'other', name: '其他' },
+      ],
+      merchantEmail: '1161132533@qq.com',
+      emailSubjectPrefix: '[Flora SPA预约]',
+      dailyEmailTime: '00:00',
+      googleCalendarId: '1f92b0f7ee39a8b42bb060d9058f32da62f10543046c03e4d7e50ce0d3902651@group.calendar.google.com',
+      googleCalendarShared: true,
+      googleCalendarName: 'FLORA SPA',
+      timeZone: 'Asia/Tokyo',
+      googleWriteTimeZone: 'Asia/Shanghai',
+      storageKey: 'booking-platform-floraspa-v1',
+      accessCode: 'FLORA88',
+      technicians: [
+        { id: 'flora-a', code: 'F1', name: { jp: '葵', en: 'Aoi', cn: '葵' } },
+        { id: 'flora-b', code: 'F2', name: { jp: '凛', en: 'Rin', cn: '凛' } },
+        { id: 'flora-c', code: 'F3', name: { jp: '芽衣', en: 'Mei', cn: '芽衣' } },
+        { id: 'flora-d', code: 'F4', name: { jp: '桜', en: 'Sakura', cn: '樱' } },
+      ],
+      techWorkKey: 'tech-work-floraspa-v1',
     },
   ];
 
@@ -373,7 +437,34 @@
         .filter(Boolean);
     }
 
-    const saved = { bedCount: count, bedLabels: labels };
+    const openHour = clampHour(next.openHour, base && base.openHour);
+    const openMinute = clampMinute(next.openMinute, base && base.openMinute);
+    const closeHour = clampHour(next.closeHour, base && base.closeHour);
+    const closeMinute = clampMinute(next.closeMinute, base && base.closeMinute);
+    const overnight =
+      next.overnight != null
+        ? Boolean(next.overnight)
+        : Boolean(base && base.overnight);
+    const hoursLabel =
+      next.hoursLabel ||
+      formatHoursLabel(openHour, openMinute, closeHour, closeMinute, overnight);
+
+    const minGapMinutes = clampGapMinutes(
+      next.minGapMinutes != null ? next.minGapMinutes : prev.minGapMinutes,
+      base && base.minGapMinutes
+    );
+
+    const saved = {
+      bedCount: count,
+      bedLabels: labels,
+      openHour,
+      openMinute,
+      closeHour,
+      closeMinute,
+      overnight,
+      hoursLabel,
+      minGapMinutes,
+    };
     if (courses) saved.courses = courses;
     all[storeId] = saved;
     localStorage.setItem(RESOURCE_OVERRIDE_KEY, JSON.stringify(all));
@@ -384,6 +475,38 @@
     const all = readResourceOverrides();
     delete all[storeId];
     localStorage.setItem(RESOURCE_OVERRIDE_KEY, JSON.stringify(all));
+  }
+
+  function clampHour(v, fallback) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return Number(fallback) || 0;
+    return Math.max(0, Math.min(23, Math.round(n)));
+  }
+
+  function clampMinute(v, fallback) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return Number(fallback) || 0;
+    return n >= 30 ? 30 : 0;
+  }
+
+  function clampGapMinutes(v, fallback) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) {
+      const fb = Number(fallback);
+      return Number.isFinite(fb) ? Math.max(0, Math.min(180, Math.round(fb))) : 0;
+    }
+    return Math.max(0, Math.min(180, Math.round(n)));
+  }
+
+  function formatHoursLabel(openH, openM, closeH, closeM, overnight) {
+    const a = `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`;
+    const b = `${String(closeH).padStart(2, '0')}:${String(closeM).padStart(2, '0')}`;
+    if (overnight) {
+      if (closeH === 0 && closeM === 0) return `${a} – 24:00`;
+      return `${a} – 次日 ${b}`;
+    }
+    if (closeH === 0 && closeM === 0) return `${a} – 24:00`;
+    return `${a} – ${b}`;
   }
 
   function withResourceOverride(store) {
@@ -398,7 +521,27 @@
       if (Array.isArray(ov.courses) && ov.courses.length) {
         merged.courses = ov.courses.map((c) => Object.assign({}, c));
       }
+      if (ov.openHour != null) merged.openHour = clampHour(ov.openHour, store.openHour);
+      if (ov.openMinute != null) merged.openMinute = clampMinute(ov.openMinute, store.openMinute);
+      if (ov.closeHour != null) merged.closeHour = clampHour(ov.closeHour, store.closeHour);
+      if (ov.closeMinute != null) {
+        merged.closeMinute = clampMinute(ov.closeMinute, store.closeMinute);
+      }
+      if (ov.overnight != null) merged.overnight = Boolean(ov.overnight);
+      if (ov.minGapMinutes != null) {
+        merged.minGapMinutes = clampGapMinutes(ov.minGapMinutes, store.minGapMinutes);
+      }
+      merged.hoursLabel =
+        ov.hoursLabel ||
+        formatHoursLabel(
+          merged.openHour,
+          merged.openMinute || 0,
+          merged.closeHour,
+          merged.closeMinute || 0,
+          merged.overnight
+        );
     }
+    merged.minGapMinutes = clampGapMinutes(merged.minGapMinutes, 0);
     return normalizeStoreResources(merged);
   }
 

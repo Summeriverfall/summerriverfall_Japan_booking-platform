@@ -74,9 +74,13 @@
   }
 
   function todayBusinessDate() {
-    const t = tokyoParts();
+    return businessDateFromInstant(new Date());
+  }
+
+  /** 某时刻对应的营业日（跨夜店凌晨算前一天） */
+  function businessDateFromInstant(date) {
+    const t = tokyoParts(date);
     const cfg = CFG();
-    // 跨夜店：日本时间凌晨仍算前一营业日
     if (cfg && cfg.overnight && t.hour < (cfg.closeHour || 0)) {
       const utc = new Date(Date.UTC(t.year, t.month - 1, t.day));
       utc.setUTCDate(utc.getUTCDate() - 1);
@@ -126,6 +130,76 @@
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
+  /** 某时长套餐：最早=开门；最晚=关门前能做完（start+时长 ≤ 关门） */
+  function slotWindowForDuration(durationMinutes) {
+    const dur = Number(durationMinutes) || 60;
+    const span = businessSpanMinutes();
+    const earliest = offsetToTime(0);
+    const lastOff = span - dur;
+    if (lastOff < 0) {
+      return { ok: false, durationMinutes: dur, earliest, latest: '', reason: 'beyond-hours' };
+    }
+    return { ok: true, durationMinutes: dur, earliest, latest: offsetToTime(lastOff) };
+  }
+
+  /** 当天已过的半点不能再约：从「现在」向上取整到下一个 slot */
+  function minStartOffset(dateStr) {
+    const today = todayBusinessDate();
+    const snap = CFG().slotMinutes || 30;
+    const span = businessSpanMinutes();
+    if (dateStr < today) return span;
+    if (dateStr > today) return 0;
+    const nowOff = timeToOffset(nowTokyoHhmm());
+    if (nowOff <= 0) return 0;
+    const rem = nowOff % snap;
+    return rem === 0 ? nowOff : nowOff + (snap - rem);
+  }
+
+  /** 扫当天占用：最早能连续空出 need 张床、做完 duration 的半点（含当前时刻） */
+  function earliestAvailable(dateStr, durationMinutes, guests) {
+    const dur = Number(durationMinutes) || 60;
+    const need = Math.max(1, Math.min(Number(guests) || 1, CFG().bedCount));
+    const snap = CFG().slotMinutes || 30;
+    const lastStart = businessSpanMinutes() - dur;
+    const first = minStartOffset(dateStr);
+    if (lastStart < 0 || first > lastStart) return { ok: false, startTime: '', beds: [] };
+    for (let off = first; off <= lastStart; off += snap) {
+      const startTime = offsetToTime(off);
+      const beds = findFreeBeds(dateStr, startTime, dur, need);
+      if (beds.length >= need) {
+        const seam = seamFlags(dateStr, beds, startTime, dur);
+        return {
+          ok: true,
+          startTime,
+          beds,
+          seamBefore: seam.before,
+          seamAfter: seam.after,
+        };
+      }
+    }
+    return { ok: false, startTime: '', beds: [], seamBefore: false, seamAfter: false };
+  }
+
+  function slotWindowsForStaff(dateStr) {
+    const guestCols = [1, 2, 3].filter((n) => n <= CFG().bedCount);
+    return [30, 60, 90].map((dur) => {
+      const win = slotWindowForDuration(dur);
+      const byGuests = {};
+      guestCols.forEach((g) => {
+        byGuests[g] = win.ok
+          ? earliestAvailable(dateStr, dur, g)
+          : { ok: false, startTime: '', beds: [] };
+      });
+      return {
+        durationMinutes: dur,
+        latest: win.latest,
+        windowOk: win.ok,
+        guestCols,
+        byGuests,
+      };
+    });
+  }
+
   function businessSpanMinutes() {
     const cfg = CFG();
     if (cfg.overnight) {
@@ -148,9 +222,10 @@
     return { bookings: [], closures: [], meta: { updatedAt: null } };
   }
 
-  function save(state) {
+  function save(state, opts) {
     state.meta.updatedAt = new Date().toISOString();
     localStorage.setItem(CFG().storageKey, JSON.stringify(state));
+    if (opts && opts.silent) return state;
     try {
       localStorage.setItem(
         'booking_platform_sync_ping',
@@ -226,15 +301,40 @@
     return Array.from({ length: CFG().bedCount }, (_, i) => i);
   }
 
+  function minGapMinutes() {
+    const n = Number(CFG().minGapMinutes);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(180, Math.round(n));
+  }
+
   function isBedFree(dateStr, bedIndex, startTime, durationMinutes, ignoreBookingId) {
     const start = timeToOffset(startTime);
     const end = start + durationMinutes;
     if (end > businessSpanMinutes()) return false;
+    const gap = minGapMinutes();
     const items = occupancyForDate(dateStr).filter((x) => x.bedIndex === bedIndex);
     return !items.some((x) => {
       if (ignoreBookingId && x.ref && x.ref.id === ignoreBookingId) return false;
-      return overlaps(start, end, x.start, x.end);
+      if (overlaps(start, end, x.start, x.end)) return true;
+      if (gap > 0 && x.end <= start && start < x.end + gap) return true;
+      if (gap > 0 && end <= x.start && x.start < end + gap) return true;
+      return false;
     });
+  }
+
+  /** 所选床上，新单是否紧贴已有占用（间隔 0） */
+  function seamFlags(dateStr, beds, startTime, durationMinutes) {
+    const start = timeToOffset(startTime);
+    const end = start + Number(durationMinutes || 0);
+    const set = new Set((beds || []).map(Number));
+    let before = false;
+    let after = false;
+    occupancyForDate(dateStr).forEach((x) => {
+      if (!set.has(Number(x.bedIndex))) return;
+      if (x.end === start) before = true;
+      if (x.start === end) after = true;
+    });
+    return { before, after };
   }
 
   function findFreeBeds(dateStr, startTime, durationMinutes, needCount, ignoreBookingId) {
@@ -803,6 +903,16 @@
     return { ok: true, closure: c };
   }
 
+  function listCalendarIssues(dateStr) {
+    return load().bookings.filter(
+      (b) =>
+        b.date === dateStr &&
+        b.status !== 'cancelled' &&
+        Array.isArray(b.calendarIssues) &&
+        b.calendarIssues.length
+    );
+  }
+
   function listBookings(dateStr) {
     return load()
       .bookings.filter((b) => b.date === dateStr)
@@ -843,6 +953,236 @@
     save(Object.assign(emptyState(), data));
   }
 
+  function applyParsedToBooking(already, parsed, cfg) {
+    let changed = false;
+    const guestName = normalizeGuestName(parsed.guestName);
+    if (parsed.date && already.date !== parsed.date) {
+      already.date = parsed.date;
+      changed = true;
+    }
+    if (parsed.startTime && already.startTime !== parsed.startTime) {
+      already.startTime = parsed.startTime;
+      changed = true;
+    }
+    if (parsed.durationMinutes && Number(already.durationMinutes) !== Number(parsed.durationMinutes)) {
+      already.durationMinutes = parsed.durationMinutes;
+      changed = true;
+    }
+    if (parsed.guests && Number(already.guests) !== Number(parsed.guests)) {
+      already.guests = parsed.guests;
+      changed = true;
+    }
+    if (guestName && already.guestName !== guestName) {
+      already.guestName = guestName;
+      changed = true;
+    }
+    if (parsed.guestPhone && already.guestPhone !== parsed.guestPhone) {
+      already.guestPhone = parsed.guestPhone;
+      changed = true;
+    }
+    if (parsed.courseName && already.courseName !== parsed.courseName) {
+      already.courseName = parsed.courseName;
+      changed = true;
+    }
+    if (parsed.courseId && already.courseId !== parsed.courseId) {
+      already.courseId = parsed.courseId;
+      changed = true;
+    }
+    const beds = (parsed.beds || []).map(Number).filter((i) => i >= 0 && i < cfg.bedCount);
+    if (beds.length && beds.join(',') !== (already.beds || []).join(',')) {
+      already.beds = beds;
+      changed = true;
+    }
+    if (parsed.googleEventId && already.googleEventId !== parsed.googleEventId) {
+      already.googleEventId = parsed.googleEventId;
+      changed = true;
+    }
+    if (parsed.googleEventLink) already.googleEventLink = parsed.googleEventLink;
+    already.googleCalendarId = cfg.googleCalendarId || already.googleCalendarId;
+    already.googleSyncedAt = new Date().toISOString();
+    const nextIssues = (parsed.issues || []).slice();
+    if (nextIssues.join(',') !== (already.calendarIssues || []).join(',')) {
+      already.calendarIssues = nextIssues;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
+   * 把 Google 日历事件并进看板。同 eventId 会更新时间/姓名；日历上删掉的（仅 source=google-calendar）会撤掉。
+   */
+  function importFromCalendarEvents(events, opts) {
+    const dateFilter = opts && opts.date;
+    const prune = Boolean(opts && opts.prune);
+    const cfg = CFG();
+    let imported = 0;
+    let skipped = 0;
+    let linked = 0;
+    let updated = 0;
+    let removed = 0;
+    const seenEventIds = new Set();
+    const TEST_CAL_IDS = {
+      '3d2196ef12eb39bff5295bf771a252e75ad6691e5253c65380e1be88cbfc5501@group.calendar.google.com': true,
+    };
+    {
+      const state = load();
+      const keep = state.bookings.filter((b) => {
+        if (b.id && String(b.id).indexOf('demo-1500') === 0) return false;
+        if (b.googleCalendarId && TEST_CAL_IDS[b.googleCalendarId]) return false;
+        if (normalizeGuestName(b.guestName) === '张三') return false;
+        if (
+          cfg.googleCalendarId &&
+          b.googleCalendarId &&
+          b.source === 'google-calendar' &&
+          b.googleCalendarId !== cfg.googleCalendarId
+        ) {
+          return false;
+        }
+        return true;
+      });
+      if (keep.length !== state.bookings.length) {
+        state.bookings = keep;
+        save(state, { silent: true });
+      }
+    }
+
+    for (const ev of events || []) {
+      if (!ev || ev.status === 'cancelled') {
+        skipped += 1;
+        continue;
+      }
+      const parsed =
+        global.CalendarImport && CalendarImport.parseEvent
+          ? CalendarImport.parseEvent(ev, cfg)
+          : null;
+      if (!parsed || !parsed.startTime) {
+        skipped += 1;
+        continue;
+      }
+      if (dateFilter && parsed.date !== dateFilter) {
+        skipped += 1;
+        continue;
+      }
+      if (parsed.googleEventId) seenEventIds.add(parsed.googleEventId);
+
+      const state = load();
+      let already = state.bookings.find(
+        (b) =>
+          (parsed.googleEventId && b.googleEventId === parsed.googleEventId) ||
+          (parsed.existingBookingId && b.id === parsed.existingBookingId)
+      );
+      if (!already) {
+        already = state.bookings.find(
+          (b) =>
+            b.status !== 'cancelled' &&
+            b.date === parsed.date &&
+            b.startTime === parsed.startTime &&
+            normalizeGuestName(b.guestName) === normalizeGuestName(parsed.guestName) &&
+            Number(b.durationMinutes) === Number(parsed.durationMinutes)
+        );
+      }
+      if (already) {
+        if (already.status === 'cancelled') {
+          already.status = 'confirmed';
+          already.confirmedAt = new Date().toISOString();
+          already.cancelReason = '';
+          already.cancelledAt = null;
+        }
+        const changed = applyParsedToBooking(already, parsed, cfg);
+        if (!already.source) already.source = 'google-calendar';
+        save(state, { silent: true });
+        if (changed) updated += 1;
+        else linked += 1;
+        continue;
+      }
+
+      let beds = (parsed.beds || []).map(Number).filter((i) => i >= 0 && i < cfg.bedCount);
+      if (!beds.length) {
+        beds = findFreeBeds(
+          parsed.date,
+          parsed.startTime,
+          parsed.durationMinutes,
+          Math.min(parsed.guests, cfg.bedCount)
+        );
+      }
+      if (!beds.length) {
+        const n = Math.min(Math.max(parsed.guests, 1), cfg.bedCount);
+        beds = Array.from({ length: n }, (_, i) => i);
+      }
+
+      state.bookings.push({
+        id: parsed.existingBookingId || uid('bk'),
+        date: parsed.date,
+        startTime: parsed.startTime,
+        durationMinutes: parsed.durationMinutes,
+        guests: Math.max(parsed.guests, beds.length),
+        beds,
+        courseId: parsed.courseId || '',
+        courseName: parsed.courseName || resolveCourseName(parsed.courseId),
+        channelId: parsed.channelId || 'whatsapp',
+        guestName: normalizeGuestName(parsed.guestName),
+        guestPhone: parsed.guestPhone || '',
+        note: parsed.note || '',
+        status: 'confirmed',
+        createdAt: new Date().toISOString(),
+        confirmedAt: new Date().toISOString(),
+        source: 'google-calendar',
+        googleEventId: parsed.googleEventId || null,
+        googleEventLink: parsed.googleEventLink || '',
+        googleCalendarId: cfg.googleCalendarId || null,
+        googleSyncedAt: new Date().toISOString(),
+        calendarIssues: (parsed.issues || []).slice(),
+        emailLogs: [],
+      });
+      save(state, { silent: true });
+      imported += 1;
+    }
+
+    if (prune && dateFilter && seenEventIds.size > 0) {
+      const state = load();
+      state.bookings.forEach((b) => {
+        if (b.date !== dateFilter || b.status === 'cancelled') return;
+        if (b.source !== 'google-calendar' || !b.googleEventId) return;
+        if (b.googleCalendarId && cfg.googleCalendarId && b.googleCalendarId !== cfg.googleCalendarId)
+          return;
+        if (seenEventIds.has(b.googleEventId)) return;
+        b.status = 'cancelled';
+        b.cancelReason = 'calendar-removed';
+        b.cancelledAt = new Date().toISOString();
+        removed += 1;
+      });
+      if (removed) save(state, { silent: true });
+    }
+
+    if (dateFilter) {
+      const state = load();
+      const keep = state.bookings.filter(
+        (b) =>
+          !(
+            b.date === dateFilter &&
+            b.status === 'cancelled' &&
+            b.cancelReason === 'calendar-removed'
+          )
+      );
+      if (keep.length !== state.bookings.length) {
+        state.bookings = keep;
+      }
+      save(state);
+    } else {
+      save(load());
+    }
+
+    return {
+      ok: true,
+      imported,
+      skipped,
+      linked,
+      updated,
+      removed,
+      total: (events || []).length,
+    };
+  }
+
   function resetAll() {
     localStorage.removeItem(CFG().storageKey);
     save(emptyState());
@@ -850,12 +1190,18 @@
 
   global.BookingStore = {
     todayBusinessDate,
+    businessDateFromInstant,
     nowTokyoHhmm,
     tokyoParts,
     formatDate,
     parseDate,
     timeToOffset,
     offsetToTime,
+    slotWindowForDuration,
+    earliestAvailable,
+    slotWindowsForStaff,
+    minGapMinutes,
+    seamFlags,
     businessSpanMinutes,
     load,
     save,
@@ -885,12 +1231,14 @@
     respondOpenRequest,
     getDailyEmailTime,
     setDailyEmailTime,
+    listCalendarIssues,
     listBookings,
     listClosures,
     appendEmailLog,
     setGoogleEvent,
     exportJson,
     importJson,
+    importFromCalendarEvents,
     resetAll,
     allBedIndexes,
   };

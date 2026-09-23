@@ -131,6 +131,33 @@
     return data;
   }
 
+  async function listCalendarEvents(payload) {
+    if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
+    if (!payload || !payload.calendarId) {
+      throw new Error('未配置门店 googleCalendarId');
+    }
+    const res = await fetch(`${baseUrl()}/calendar/events`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        calendarId: payload.calendarId,
+        date: payload.date || '',
+        timeMin: payload.timeMin || '',
+        timeMax: payload.timeMax || '',
+      }),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (_) {
+      data = null;
+    }
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || `读取日历失败 HTTP ${res.status}`);
+    }
+    return data;
+  }
+
   async function registerDailyDigest(payload) {
     if (!baseUrl()) throw new Error('未配置 EMAIL_CONFIG.apiBaseUrl');
     const res = await fetch(`${baseUrl()}/digest/register`, {
@@ -157,6 +184,7 @@
     deleteCalendarEvent,
     cleanupCalendarDay,
     rewriteCalendarDay,
+    listCalendarEvents,
     registerDailyDigest,
   };
 })(window);

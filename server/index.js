@@ -3,11 +3,25 @@
  * 密钥只放本机 .env，不要提交到 Git。
  */
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
 const calendar = require('./calendar');
 const digest = require('./digest');
+
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        const err = new Error(message || `请求超时（${Math.round(ms / 1000)}s）`);
+        err.code = 'TIMEOUT';
+        reject(err);
+      }, ms);
+    }),
+  ]);
+}
 
 const PORT = Number(process.env.PORT || 8787);
 const GMAIL_USER = process.env.GMAIL_USER || '';
@@ -48,6 +62,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: '8mb' }));
+app.use(express.static(path.join(__dirname, '..', 'admin')));
 
 function requireApiKey(req, res, next) {
   if (!API_KEY) {
@@ -97,6 +112,68 @@ app.get('/calendar/list', requireApiKey, async (_req, res) => {
     res.json({ ok: true, items });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || String(err) });
+  }
+});
+
+/**
+ * POST /calendar/events
+ * body: { calendarId, date? } 或 { calendarId, timeMin, timeMax }
+ * 只读列出事件，供看板从日历导入。不会改日历。
+ */
+app.post('/calendar/events', requireApiKey, async (req, res) => {
+  try {
+    const { calendarId, date, timeMin, timeMax } = req.body || {};
+    if (!calendarId) {
+      res.status(400).json({ ok: false, error: '缺少 calendarId' });
+      return;
+    }
+    let min = timeMin;
+    let max = timeMax;
+    if (!min || !max) {
+      if (!date) {
+        res.status(400).json({ ok: false, error: '缺少 date 或 timeMin/timeMax' });
+        return;
+      }
+      const [y, m, d] = String(date).split('-').map(Number);
+      if (!y || !m || !d) {
+        res.status(400).json({ ok: false, error: 'date 须为 YYYY-MM-DD' });
+        return;
+      }
+      const next = new Date(Date.UTC(y, m - 1, d + 2));
+      const ny = next.getUTCFullYear();
+      const nm = String(next.getUTCMonth() + 1).padStart(2, '0');
+      const nd = String(next.getUTCDate()).padStart(2, '0');
+      min = `${date}T00:00:00+09:00`;
+      max = `${ny}-${nm}-${nd}T06:00:00+09:00`;
+    }
+    const raw = await withTimeout(
+      calendar.listEventsInRange(calendarId, min, max),
+      25000,
+      '读取 Google 日历超时，请检查网络或本机代理'
+    );
+    const items = (raw || []).map((ev) => ({
+      id: ev.id,
+      htmlLink: ev.htmlLink || '',
+      status: ev.status || '',
+      summary: ev.summary || '',
+      description: ev.description || '',
+      start: ev.start || null,
+      end: ev.end || null,
+      extendedProperties: ev.extendedProperties || null,
+    }));
+    res.json({ ok: true, items, count: items.length });
+  } catch (err) {
+    console.error('[calendar] list events failed', err);
+    const raw = err.message || String(err);
+    const isGrant =
+      /invalid_grant/i.test(raw) ||
+      (err.response && err.response.data && err.response.data.error === 'invalid_grant');
+    res.status(500).json({
+      ok: false,
+      error: isGrant
+        ? 'Google 授权已过期，请在 server 目录运行 npm run auth-google 重新登录'
+        : raw,
+    });
   }
 });
 
@@ -311,6 +388,7 @@ async function sendMailPayload({ to, subject, text, chartDataUrl }) {
 
 app.listen(PORT, () => {
   console.log(`[gateway] listening on http://127.0.0.1:${PORT}`);
+  console.log(`[gateway] board http://127.0.0.1:${PORT}/cs.html`);
   console.log(
     `[gateway] gmail=${Boolean(GMAIL_USER && GMAIL_APP_PASSWORD)} calendar=${calendar.isConfigured()}`
   );

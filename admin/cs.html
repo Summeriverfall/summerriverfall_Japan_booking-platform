@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>カスタマー対応</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260923-cal12">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -37,9 +37,14 @@
       <button class="btn" type="button" id="btnSaveDailyTime" data-i18n="saveDailyTime">送信時刻を保存</button>
       <button class="btn" type="button" id="btnPreviewDigest" data-i18n="previewDigest">日次サマリーをプレビュー</button>
       <button class="btn" type="button" id="btnRefresh" data-i18n="refreshBoard">ボード更新</button>
+      <button class="btn" type="button" id="btnImportCal" data-i18n="importCalendar">カレンダーから取込</button>
       <button class="btn ghost" type="button" id="btnExport" data-i18n="exportData">データ書き出し</button>
+      <button class="btn ghost" type="button" id="btnImportJson" data-i18n="importJson">バックアップ取込</button>
+      <input type="file" id="importJsonFile" accept="application/json,.json" hidden>
       <button class="btn danger" type="button" id="btnReset" data-i18n="resetData">当店のテストデータを消去</button>
       <span class="hint" id="remainHint"></span>
+      <span class="hint" id="calSyncHint">正在同步日历…</span>
+      <div id="calIssueBanner" role="status"></div>
     </div>
 
     <div class="grid-stack">
@@ -47,6 +52,7 @@
         <h2 data-i18n="csBoardTitle">ベッド時間軸</h2>
         <p class="hint" data-i18n="csBoardHint">空档拖选可新建…</p>
         <div id="board"></div>
+        <div class="slot-guide" id="slotGuide"></div>
       </section>
 
       <section class="card card-form">
@@ -108,13 +114,14 @@
     </div>
   </div>
 
-  <script src="stores.js?v=20260724-rt2"></script>
-  <script src="store.js?v=20260724-rt2"></script>
-  <script src="desk-i18n.js?v=20260724-rt2"></script>
-  <script src="board-render.js?v=20260724-rt2"></script>
-  <script src="wa-parse.js"></script>
-  <script src="email-config.js"></script>
-  <script src="email-client.js"></script>
-  <script src="cs-app.js?v=20260724-rt2"></script>
+  <script src="stores.js?v=20260923-cal12"></script>
+  <script src="store.js?v=20260923-cal12"></script>
+  <script src="desk-i18n.js?v=20260923-cal12"></script>
+  <script src="board-render.js?v=20260923-cal12"></script>
+  <script src="wa-parse.js?v=20260923-cal12"></script>
+  <script src="email-config.js?v=20260923-cal12"></script>
+  <script src="email-client.js?v=20260923-cal12"></script>
+  <script src="calendar-import.js?v=20260923-cal12"></script>
+  <script src="cs-app.js?v=20260923-cal12"></script>
 </body>
 </html>

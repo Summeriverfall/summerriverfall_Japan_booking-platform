@@ -27,8 +27,20 @@
     .store-card.is-editing .res-edit { display: block; }
     .store-card.is-editing .entry-go { display: none; }
     .res-edit label { display: block; font-size: .75rem; color: var(--muted); margin: .45rem 0 .2rem; }
+    .res-hours {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .45rem;
+    }
+    .res-hours label { margin-top: 0; }
+    .res-overnight {
+      display: flex; align-items: center; gap: .4rem;
+      font-size: .8rem; color: var(--ink); margin: .45rem 0 .2rem;
+    }
+    .res-overnight input { width: auto; }
     .res-edit input[type="number"],
     .res-edit input[type="text"],
+    .res-edit input[type="time"],
     .res-edit select {
       width: 100%; border: 1px solid var(--line); border-radius: 8px;
       padding: .4rem .55rem; font: inherit; background: #fff;
@@ -91,8 +103,8 @@
     <div class="store-grid" id="storeGrid"></div>
   </main>
 
-  <script src="stores.js?v=20260727-brace"></script>
-  <script src="desk-i18n.js?v=20260727-brace"></script>
+  <script src="stores.js?v=20260923-hours2"></script>
+  <script src="desk-i18n.js?v=20260923-hours2"></script>
   <script>
     StoreRegistry.setRole('admin');
     const grid = document.getElementById('storeGrid');
@@ -110,6 +122,17 @@
     });
     document.title = DeskI18n.t('adminPortalTitle');
     DeskI18n.applyDom();
+
+    function pad2(n) {
+      return String(Number(n) || 0).padStart(2, '0');
+    }
+
+    function parseTimeInput(el, fallbackH, fallbackM) {
+      const m = String((el && el.value) || '').match(/^(\d{1,2}):(\d{2})/);
+      if (!m) return { h: fallbackH, min: fallbackM };
+      const min = Number(m[2]) >= 30 ? 30 : 0;
+      return { h: Math.max(0, Math.min(23, Number(m[1]))), min };
+    }
 
     function escapeHtml(s) {
       return String(s || '')
@@ -174,6 +197,25 @@
               <span class="entry-go">${escapeHtml(DeskI18n.t('enterStore'))}</span>
             </a>
             <div class="res-edit">
+              <label>${escapeHtml(DeskI18n.t('storeHours'))}</label>
+              <p class="res-type-hint">${escapeHtml(DeskI18n.t('hoursHint'))}</p>
+              <div class="res-hours">
+                <div>
+                  <label>${escapeHtml(DeskI18n.t('storeOpen'))}</label>
+                  <input type="time" step="1800" data-open value="${pad2(s.openHour)}:${pad2(s.openMinute || 0)}">
+                </div>
+                <div>
+                  <label>${escapeHtml(DeskI18n.t('storeClose'))}</label>
+                  <input type="time" step="1800" data-close value="${pad2(s.closeHour)}:${pad2(s.closeMinute || 0)}">
+                </div>
+              </div>
+              <label class="res-overnight">
+                <input type="checkbox" data-overnight ${s.overnight ? 'checked' : ''}>
+                ${escapeHtml(DeskI18n.t('storeOvernight'))}
+              </label>
+              <label>${escapeHtml(DeskI18n.t('minGap'))}</label>
+              <p class="res-type-hint">${escapeHtml(DeskI18n.t('minGapHint'))}</p>
+              <input type="number" min="0" max="180" step="5" data-gap value="${Number(s.minGapMinutes) || 0}">
               <label>${escapeHtml(DeskI18n.t('resCount'))}</label>
               <input type="number" min="1" max="20" data-count value="${s.bedCount}">
               <label>${escapeHtml(DeskI18n.t('resNames'))}</label>
@@ -246,6 +288,24 @@
               ...(t ? {} : {}),
             };
           });
+          const base = StoreRegistry.getStore(storeId) || {};
+          const open = parseTimeInput(
+            card.querySelector('[data-open]'),
+            base.openHour || 11,
+            base.openMinute || 0
+          );
+          const close = parseTimeInput(
+            card.querySelector('[data-close]'),
+            base.closeHour || 22,
+            base.closeMinute || 0
+          );
+          let overnight = Boolean(card.querySelector('[data-overnight]').checked);
+          if (
+            close.h < open.h ||
+            (close.h === open.h && close.min <= open.min)
+          ) {
+            overnight = true;
+          }
           const courses = String(card.querySelector('[data-courses]').value || '')
             .split(/\n+/)
             .map((line) => line.trim())
@@ -264,6 +324,12 @@
             bedCount: count,
             bedLabels,
             courses,
+            openHour: open.h,
+            openMinute: open.min,
+            closeHour: close.h,
+            closeMinute: close.min,
+            overnight,
+            minGapMinutes: Number((card.querySelector('[data-gap]') || {}).value) || 0,
           });
           const msg = card.querySelector('[data-msg]');
           msg.className = 'res-msg ok';

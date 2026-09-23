@@ -571,6 +571,8 @@
 
         if (eventType === 'cancel') {
           parts.push('日历已在删除时同步移除');
+        } else if (STORE_CONFIG.googleCalendarShared) {
+          parts.push('共享店日历只读，未改写店家原事件');
         } else if (!skipCalendar && booking) {
           try {
             statusEl.textContent = '正在重写当日 Google 日历…';
@@ -818,8 +820,12 @@
       const dur = Number(document.getElementById('duration').value) || 60;
       remainHint.textContent = `参考：${start} 起 ${dur} 分钟，剩余可约约 ${BookingStore.remainingAt(date, start, dur)} 床`;
     }
+    paintCalIssues(date);
+    paintSlotGuide();
 
-    const bookings = BookingStore.listBookings(date);
+    const bookings = BookingStore.listBookings(date).filter(
+      (b) => b.status !== 'cancelled'
+    );
     listEl.innerHTML = bookings.length
       ? bookings
           .map((b) => {
@@ -832,6 +838,11 @@
             <div class="title">
               ${escapeHtml(b.guestName || '未留名')} · ${b.guests}人
               <span class="badge ${b.status}">${statusLabel(b.status)}</span>
+              ${
+                b.calendarIssues && b.calendarIssues.length
+                  ? `<span class="badge hold">日历异常</span>`
+                  : ''
+              }
             </div>
             <div class="meta">${b.startTime}–${end} · ${beds} · ${b.id}</div>
             <div class="actions">
@@ -1119,7 +1130,10 @@
   });
 
   document.getElementById('btnRefresh').addEventListener('click', refresh);
-  dateInput.addEventListener('change', refresh);
+  dateInput.addEventListener('change', () => {
+    refresh();
+    CalendarImport.syncNow(currentDate, onCalSync);
+  });
 
   document.getElementById('btnExport').addEventListener('click', () => {
     const blob = new Blob([BookingStore.exportJson()], { type: 'application/json' });
@@ -1127,6 +1141,120 @@
     a.href = URL.createObjectURL(blob);
     a.download = `booking-${cfg.storeId}-${currentDate()}.json`;
     a.click();
+  });
+
+  function paintSlotGuide() {
+    const el = document.getElementById('slotGuide');
+    if (!el || !BookingStore.slotWindowsForStaff) return;
+    const date = currentDate();
+    const rows = BookingStore.slotWindowsForStaff(date);
+    const guestCols = (rows[0] && rows[0].guestCols) || [1, 2, 3];
+    const hours = STORE_CONFIG.hoursLabel || '';
+    const gap = Number(STORE_CONFIG.minGapMinutes) || 0;
+    const guestHeads = guestCols
+      .map((g) => `<th>${g}${DeskI18n.t('slotGuideGuestEarliest')}</th>`)
+      .join('');
+    const seamNote = (hit) => {
+      if (!hit || !hit.ok) {
+        return `<td class="is-bad">${DeskI18n.t('slotGuideFull')}</td>`;
+      }
+      let mark = '';
+      if (hit.seamBefore && hit.seamAfter) mark = DeskI18n.t('slotSeamBoth');
+      else if (hit.seamBefore) mark = DeskI18n.t('slotSeamBefore');
+      else if (hit.seamAfter) mark = DeskI18n.t('slotSeamAfter');
+      const extra = mark
+        ? `<div class="is-seam">${DeskI18n.t('slotSeamHint')} · ${mark}</div>`
+        : '';
+      return `<td>${hit.startTime}${extra}</td>`;
+    };
+    el.innerHTML = `
+      <h3>${DeskI18n.t('slotGuideTitle')} · ${date} · ${hours} · ${DeskI18n.t('minGap')} ${gap}</h3>
+      <p class="hint" style="margin:0 0 .4rem">${DeskI18n.t('slotGuideHint')}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>${DeskI18n.t('slotGuideDur')}</th>
+            ${guestHeads}
+            <th>${DeskI18n.t('slotGuideLatest')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((r) => {
+              const cells = guestCols.map((g) => seamNote(r.byGuests && r.byGuests[g])).join('');
+              const latest = r.windowOk
+                ? r.latest
+                : DeskI18n.t('slotGuideNone');
+              return `<tr><td>${r.durationMinutes} min</td>${cells}<td>${latest}</td></tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function paintCalIssues(dateStr) {
+    const el = document.getElementById('calIssueBanner');
+    if (!el || !BookingStore.listCalendarIssues) return;
+    const rows = BookingStore.listCalendarIssues(dateStr);
+    if (!rows.length) {
+      el.classList.remove('is-on');
+      el.textContent = '';
+      return;
+    }
+    const parts = rows.map((b) => {
+      const labels = (b.calendarIssues || []).map((c) => DeskI18n.calendarIssueLabel(c));
+      return `${b.guestName || '未留名'}（${labels.join('、')}）`;
+    });
+    el.classList.add('is-on');
+    el.textContent = `日历异常 ${rows.length} 条：${parts.join('；')}`;
+  }
+
+  function setCalHint(result) {
+    const el = document.getElementById('calSyncHint');
+    if (!el) return;
+    el.textContent = CalendarImport.statusText(result);
+    el.className = result && result.ok ? 'hint ok' : 'hint is-error';
+  }
+
+  function onCalSync(result) {
+    setCalHint(result);
+    if (result && result.ok && (result.imported || result.updated || result.removed)) {
+      refresh();
+    }
+  }
+
+  document.getElementById('btnImportCal').addEventListener('click', async () => {
+    const btn = document.getElementById('btnImportCal');
+    btn.disabled = true;
+    await CalendarImport.syncNow(currentDate, (r) => {
+      onCalSync(r);
+      if (!r.ok) {
+        alert(
+          `同步失败：${r.error || '网关不可用'}\n\n请用本机 http://127.0.0.1:8787/cs.html 打开看板，并保证这台电脑能访问 Google。`
+        );
+      }
+    });
+    btn.disabled = false;
+  });
+
+  document.getElementById('btnImportJson').addEventListener('click', () => {
+    document.getElementById('importJsonFile').click();
+  });
+  document.getElementById('importJsonFile').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        if (!confirm('导入备份会覆盖本店当前看板数据，确定？')) return;
+        BookingStore.importJson(String(reader.result || ''));
+        refresh();
+      } catch (err) {
+        alert(`导入失败：${(err && err.message) || err}`);
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file, 'utf-8');
   });
 
   document.getElementById('btnReset').addEventListener('click', () => {
@@ -1155,6 +1283,11 @@
   fillSelects();
   renderSideBeds([0]);
   dateInput.value = BookingStore.todayBusinessDate();
+  CalendarImport.startAutoSync({
+    getDate: currentDate,
+    onStatus: onCalSync,
+    intervalMs: 30000,
+  });
   const courseEl = document.getElementById('course');
   if (courseEl) {
     courseEl.addEventListener('change', () => {

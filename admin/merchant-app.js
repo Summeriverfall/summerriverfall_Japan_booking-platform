@@ -800,7 +800,7 @@
 
     let rows = `
       <div class="m-tl-row m-tl-head">
-        <div class="m-tl-corner">资源</div>
+        <div class="m-tl-corner">${DeskI18n.resourceNoun()}</div>
         <div class="m-tl-hours">${hoursHtml}</div>
       </div>`;
 
@@ -1133,6 +1133,8 @@
         remainHint.textContent = '左侧「关/开」整日操作；空档拖选关时段；点预约看项目';
       }
     }
+    paintCalIssues(date);
+    paintSlotGuide();
 
     const closures = BookingStore.listClosures(date);
     listEl.innerHTML = closures.length
@@ -1496,13 +1498,109 @@
     });
   });
 
+  function paintSlotGuide() {
+    const el = document.getElementById('slotGuide');
+    if (!el || !BookingStore.slotWindowsForStaff) return;
+    const date = currentDate();
+    const rows = BookingStore.slotWindowsForStaff(date);
+    const guestCols = (rows[0] && rows[0].guestCols) || [1, 2, 3];
+    const hours = STORE_CONFIG.hoursLabel || '';
+    const gap = Number(STORE_CONFIG.minGapMinutes) || 0;
+    const guestHeads = guestCols
+      .map((g) => `<th>${g}${DeskI18n.t('slotGuideGuestEarliest')}</th>`)
+      .join('');
+    const seamNote = (hit) => {
+      if (!hit || !hit.ok) {
+        return `<td class="is-bad">${DeskI18n.t('slotGuideFull')}</td>`;
+      }
+      let mark = '';
+      if (hit.seamBefore && hit.seamAfter) mark = DeskI18n.t('slotSeamBoth');
+      else if (hit.seamBefore) mark = DeskI18n.t('slotSeamBefore');
+      else if (hit.seamAfter) mark = DeskI18n.t('slotSeamAfter');
+      const extra = mark
+        ? `<div class="is-seam">${DeskI18n.t('slotSeamHint')} · ${mark}</div>`
+        : '';
+      return `<td>${hit.startTime}${extra}</td>`;
+    };
+    el.innerHTML = `
+      <h3>${DeskI18n.t('slotGuideTitle')} · ${date} · ${hours} · ${DeskI18n.t('minGap')} ${gap}</h3>
+      <p class="hint" style="margin:0 0 .4rem">${DeskI18n.t('slotGuideHint')}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>${DeskI18n.t('slotGuideDur')}</th>
+            ${guestHeads}
+            <th>${DeskI18n.t('slotGuideLatest')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((r) => {
+              const cells = guestCols.map((g) => seamNote(r.byGuests && r.byGuests[g])).join('');
+              const latest = r.windowOk
+                ? r.latest
+                : DeskI18n.t('slotGuideNone');
+              return `<tr><td>${r.durationMinutes} min</td>${cells}<td>${latest}</td></tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function paintCalIssues(dateStr) {
+    const el = document.getElementById('calIssueBanner');
+    if (!el || !BookingStore.listCalendarIssues) return;
+    const rows = BookingStore.listCalendarIssues(dateStr);
+    if (!rows.length) {
+      el.classList.remove('is-on');
+      el.textContent = '';
+      return;
+    }
+    const parts = rows.map((b) => {
+      const labels = (b.calendarIssues || []).map((c) => DeskI18n.calendarIssueLabel(c));
+      return `${b.guestName || '未留名'}（${labels.join('、')}）`;
+    });
+    el.classList.add('is-on');
+    el.textContent = `日历异常 ${rows.length} 条：${parts.join('；')}`;
+  }
+
+  function setCalHint(result) {
+    const el = document.getElementById('calSyncHint');
+    if (!el) return;
+    el.textContent = CalendarImport.statusText(result);
+    el.className = result && result.ok ? 'hint ok' : 'hint is-error';
+  }
+
+  function onCalSync(result) {
+    setCalHint(result);
+    if (result && result.ok && (result.imported || result.updated || result.removed)) {
+      refresh();
+    }
+  }
+
   document.getElementById('btnRefresh').addEventListener('click', refresh);
+  const btnImportCal = document.getElementById('btnImportCal');
+  if (btnImportCal) {
+    btnImportCal.addEventListener('click', async () => {
+      btnImportCal.disabled = true;
+      await CalendarImport.syncNow(currentDate, (r) => {
+        onCalSync(r);
+        if (!r.ok) {
+          alert(
+            `同步失败：${r.error || '网关不可用'}\n\n请用本机 http://127.0.0.1:8787/merchant.html 打开看板，并保证这台电脑能访问 Google。`
+          );
+        }
+      });
+      btnImportCal.disabled = false;
+    });
+  }
   dateInput.addEventListener('change', () => {
     selectedClosureId = null;
     selectedBookingId = null;
     rangeSelection = null;
     closeSide();
     refresh();
+    CalendarImport.syncNow(currentDate, onCalSync);
   });
   window.addEventListener('booking-store-changed', softRefresh);
   window.addEventListener('storage', (e) => {
@@ -1523,4 +1621,9 @@
   renderSideBeds([]);
   dateInput.value = BookingStore.todayBusinessDate();
   refresh();
+  CalendarImport.startAutoSync({
+    getDate: currentDate,
+    onStatus: onCalSync,
+    intervalMs: 30000,
+  });
 })();
