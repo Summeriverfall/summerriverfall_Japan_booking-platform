@@ -31,7 +31,6 @@
   const emailBox = document.getElementById('emailBox');
   const formErr = document.getElementById('formErr');
   const sideErr = document.getElementById('sideErr');
-  const remainHint = document.getElementById('remainHint');
   const sidePanel = document.getElementById('sidePanel');
   const sideHint = document.getElementById('sideHint');
   const sideTitle = document.getElementById('sideTitle');
@@ -92,6 +91,58 @@
 
   function currentDate() {
     return dateInput.value || BookingStore.todayBusinessDate();
+  }
+
+  function shiftYmd(ymd, days) {
+    const [y, m, d] = String(ymd || '').split('-').map(Number);
+    const dt = new Date(y || 2026, (m || 1) - 1, d || 1);
+    dt.setDate(dt.getDate() + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  function shiftBusinessDate(delta) {
+    dateInput.value = shiftYmd(currentDate(), delta);
+    dateInput.dispatchEvent(new Event('change'));
+  }
+
+  async function pushDayToCalendar(date) {
+    const calendarId = STORE_CONFIG.googleCalendarId;
+    if (!calendarId) throw new Error('未配置 googleCalendarId');
+    const active = BookingStore.listBookings(date).filter(
+      (b) => b.status !== 'cancelled' && b.status !== 'hold'
+    );
+    const events = active.map((b) => {
+      const cal = BoardUI.buildCalendarDraft(b, 'new');
+      return {
+        calendarId,
+        bookingId: cal.bookingId,
+        storeId: cal.storeId,
+        summary: cal.summary,
+        description: cal.description,
+        startDateTime: cal.startDateTime,
+        endDateTime: cal.endDateTime,
+        timeZone: cal.timeZone,
+      };
+    });
+    const calResult = await EmailClient.rewriteCalendarDay({
+      calendarId,
+      date,
+      events,
+    });
+    (calResult.events || []).forEach((r, idx) => {
+      const b = active[idx];
+      if (b && r && r.eventId) {
+        BookingStore.setGoogleEvent(b.id, {
+          eventId: r.eventId,
+          htmlLink: r.htmlLink,
+          calendarId,
+        });
+      }
+    });
+    return { count: active.length, removed: calResult.removed || 0, written: calResult.written || 0 };
   }
 
   function getMenuAnchorRect() {
@@ -803,7 +854,6 @@
         sideErr.textContent = '';
         formErr.className = 'hint ok';
         formErr.textContent = `已选 ${names}，人数已自动设为 ${beds.length}。请在菜单确认后创建。`;
-        remainHint.textContent = `参考：${range.startTime} 起 ${range.durationMinutes} 分钟，剩余可约约 ${BookingStore.remainingAt(date, range.startTime, range.durationMinutes)} 床`;
         refresh();
       },
       onBlockClick: (x) => {
@@ -815,11 +865,6 @@
     });
     syncDailyDigestToGateway();
 
-    if (!rangeSelection) {
-      const start = document.getElementById('startTime').value || `${defaultHour}:00`;
-      const dur = Number(document.getElementById('duration').value) || 60;
-      remainHint.textContent = `参考：${start} 起 ${dur} 分钟，剩余可约约 ${BookingStore.remainingAt(date, start, dur)} 床`;
-    }
     paintCalIssues(date);
     paintSlotGuide();
 
@@ -1130,10 +1175,40 @@
   });
 
   document.getElementById('btnRefresh').addEventListener('click', refresh);
+  const btnPrevDay = document.getElementById('btnPrevDay');
+  const btnNextDay = document.getElementById('btnNextDay');
+  if (btnPrevDay) btnPrevDay.addEventListener('click', () => shiftBusinessDate(-1));
+  if (btnNextDay) btnNextDay.addEventListener('click', () => shiftBusinessDate(1));
   dateInput.addEventListener('change', () => {
     refresh();
     CalendarImport.syncNow(currentDate, onCalSync);
   });
+
+  const btnPushCal = document.getElementById('btnPushCal');
+  if (btnPushCal) {
+    btnPushCal.addEventListener('click', async () => {
+      const date = currentDate();
+      btnPushCal.disabled = true;
+      const hint = document.getElementById('calSyncHint');
+      if (hint) {
+        hint.className = 'hint';
+        hint.textContent = DeskI18n.t('pushCalendar') + '…';
+      }
+      try {
+        const r = await pushDayToCalendar(date);
+        if (hint) {
+          hint.className = 'hint ok';
+          hint.textContent = `${DeskI18n.t('pushCalendarOk')} · ${date} · ${r.count} 笔（清 ${r.removed} / 写 ${r.written}）`;
+        }
+      } catch (err) {
+        if (hint) {
+          hint.className = 'hint is-error';
+          hint.textContent = `${DeskI18n.t('pushCalendarFail')}：${(err && err.message) || err}`;
+        }
+      }
+      btnPushCal.disabled = false;
+    });
+  }
 
   document.getElementById('btnExport').addEventListener('click', () => {
     const blob = new Blob([BookingStore.exportJson()], { type: 'application/json' });

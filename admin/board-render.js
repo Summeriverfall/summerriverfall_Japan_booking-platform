@@ -3,7 +3,7 @@
  */
 (function (global) {
   const TYPE_COLOR = {
-    booking: '#9bb8d9',
+    booking: '#2f9d62',
     pending: '#d97706',
     hold: '#7c3aed',
     closure: '#6b7280',
@@ -65,6 +65,15 @@
     return hourSlotMeta().map((s) => s.hour);
   }
 
+  function isNextDayHour(hour) {
+    const cfg = STORE_CONFIG;
+    return Boolean(cfg.overnight) && Number(hour) < Number(cfg.openHour || 0);
+  }
+
+  function nextDayLabel() {
+    return global.DeskI18n ? DeskI18n.t('nextDayMark') : '第二天';
+  }
+
   function renderBoard(container, dateStr, options) {
     const cfg = STORE_CONFIG;
     const span = BookingStore.businessSpanMinutes();
@@ -87,6 +96,7 @@
     slotMeta.forEach((slot, idx) => {
       const cell = document.createElement('div');
       cell.className = 'board-hour';
+      if (isNextDayHour(slot.hour)) cell.classList.add('is-nextday');
       cell.dataset.hourIndex = String(idx);
       cell.style.flex = `0 0 ${slot.widthPct}%`;
       cell.style.width = `${slot.widthPct}%`;
@@ -95,6 +105,20 @@
       hoursEl.appendChild(cell);
       hourCells.push(cell);
     });
+    const nextSlots = slotMeta.filter((s) => isNextDayHour(s.hour));
+    if (nextSlots.length) {
+      hoursEl.classList.add('has-nextday');
+      const band = document.createElement('div');
+      band.className = 'board-nextday-band';
+      const start = nextSlots[0].startOffset;
+      const end =
+        nextSlots[nextSlots.length - 1].startOffset +
+        nextSlots[nextSlots.length - 1].duration;
+      band.style.left = `${(start / span) * 100}%`;
+      band.style.width = `${((end - start) / span) * 100}%`;
+      band.textContent = nextDayLabel();
+      hoursEl.appendChild(band);
+    }
     wrap.appendChild(head);
 
     function offsetFromClientX(track, clientX) {
@@ -359,6 +383,7 @@
       slotMeta.forEach((slot) => {
         const cell = document.createElement('div');
         cell.className = 'board-hour-cell';
+        if (isNextDayHour(slot.hour)) cell.classList.add('is-nextday');
         if (slot.duration < 60) cell.classList.add('is-partial');
         cell.style.flex = `0 0 ${slot.widthPct}%`;
         cell.style.width = `${slot.widthPct}%`;
@@ -400,7 +425,7 @@
             block.classList.add('is-cal-issue');
           }
           block.style.left = `${(x.start / span) * 100}%`;
-          block.style.width = `${((x.end - x.start) / span) * 100}%`;
+          block.style.width = `calc(${((x.end - x.start) / span) * 100}% - 3px)`;
           const isClosure =
             x.type === 'closure' || x.type === 'closure_request';
           const guestLabel = (() => {
@@ -808,11 +833,19 @@
         ctx.lineTo(midX, top + cfg.bedCount * rowH);
         ctx.stroke();
       }
-      ctx.fillStyle = '#8a8178';
+      ctx.fillStyle = isNextDayHour(slot.hour) ? '#c45c26' : '#8a8178';
       ctx.font = '11px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText(String(slot.hour).padStart(2, '0'), x + 2, axisBaseline);
     });
+    const midnight = labels.find((s) => isNextDayHour(s.hour));
+    if (midnight) {
+      const mx = left + (midnight.startOffset / span) * trackW;
+      ctx.fillStyle = '#c45c26';
+      ctx.font = '600 11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(nextDayLabel(), mx + 4, textH - 8);
+    }
     // 右边界
     ctx.strokeStyle = '#e8e0d6';
     ctx.beginPath();
@@ -839,16 +872,16 @@
           const hi = highlightBookingId && x.ref && x.ref.id === highlightBookingId;
           ctx.fillStyle = TYPE_COLOR[x.type] || '#999';
           if (hi) {
-            ctx.fillStyle = '#1E8E4F';
+            ctx.fillStyle = '#166534';
           }
-          ctx.fillRect(bx, y + 8, bw, rowH - 16);
+          ctx.fillRect(bx + 1, y + 8, Math.max(3, bw - 3), rowH - 16);
         });
     }
 
     // legend
     const ly = height - 22;
     const legs = [
-      ['#9bb8d9', '已确认'],
+      ['#2f9d62', '已确认'],
       ['#d97706', '待商家确认'],
       ['#7c3aed', '预占'],
       ['#6b7280', '商家关闭'],

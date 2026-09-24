@@ -200,6 +200,21 @@ a:hover { text-decoration: underline; }
   ) !important;
 }
 .field { display: flex; flex-direction: column; gap: .25rem; min-width: 110px; }
+.field-date { min-width: 220px; }
+.date-step {
+  display: flex;
+  align-items: stretch;
+  gap: .3rem;
+}
+.date-step input[type="date"] { flex: 1; min-width: 0; }
+.date-step-btn {
+  width: 2.1rem;
+  min-width: 2.1rem;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  font-weight: 600;
+}
 .field label { font-size: .75rem; color: var(--muted); }
 .field input, .field select, .field textarea {
   border: 1px solid var(--line); border-radius: 8px; padding: .5rem .65rem;
@@ -440,12 +455,33 @@ a:hover { text-decoration: underline; }
 }
 .board-hours {
   display: flex;
+  position: relative;
   width: 100%;
   border: 1px solid var(--line);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
   overflow: hidden;
   background: #f7f1ea;
+}
+.board-hours.has-nextday {
+  padding-top: 1rem;
+}
+.board-nextday-band {
+  position: absolute;
+  top: 0;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  padding-left: 5px;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #c45c26;
+  background: #fde8d4;
+  border-left: 2px solid #e24a1a;
+  pointer-events: none;
+  z-index: 1;
+  white-space: nowrap;
 }
 .board-hour {
   box-sizing: border-box;
@@ -460,10 +496,12 @@ a:hover { text-decoration: underline; }
   overflow: hidden;
 }
 .board-hour:last-child { border-right: none; }
+.board-hour.is-nextday { color: #c45c26; background: #fff6ee; }
 .board-hour.is-selected {
   background: #c4a574;
   color: #fff;
 }
+.board-hour.is-selected.is-nextday { color: #fff; }
 .board-track {
   position: relative;
   height: 42px;
@@ -512,6 +550,16 @@ a:hover { text-decoration: underline; }
   height: 100%;
   min-width: 0;
 }
+.board-hour-cell.is-nextday {
+  background: rgba(226, 74, 26, 0.045);
+}
+.board-hour-cell.is-nextday:first-of-type,
+.board-hour-cell.is-nextday {
+  box-shadow: inset 2px 0 0 #e24a1a;
+}
+.board-hour-cell.is-nextday ~ .board-hour-cell.is-nextday {
+  box-shadow: none;
+}
 .board-hour-cell:nth-child(odd) {
   background: rgba(255, 255, 255, 0.35);
 }
@@ -529,9 +577,10 @@ a:hover { text-decoration: underline; }
   pointer-events: none;
 }
 .board-block {
-  position: absolute; top: 5px; bottom: 5px; border-radius: 4px; color: #fff;
+  position: absolute; top: 5px; bottom: 5px; border-radius: 5px; color: #fff;
   font-size: .68rem; display: flex; align-items: center; justify-content: center;
   overflow: visible; white-space: nowrap; padding: 0 4px; z-index: 1;
+  box-sizing: border-box;
 }
 .board-block-label {
   overflow: hidden;
@@ -544,7 +593,10 @@ a:hover { text-decoration: underline; }
   z-index: 6;
   box-shadow: 0 0 0 1px rgba(255,255,255,.5);
 }
-.board-block.type-booking { background: var(--blue); }
+.board-block.type-booking {
+  background: #2f9d62;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.22);
+}
 .board-block.type-pending { background: var(--amber); }
 .board-block.type-hold { background: #7c3aed; }
 .board-block.type-closure { background: var(--gray); }
@@ -595,7 +647,7 @@ a:hover { text-decoration: underline; }
 .board-legend .lg {
   display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: .35rem; vertical-align: -1px;
 }
-.board-legend .lg.booking { background: var(--blue); }
+.board-legend .lg.booking { background: #2f9d62; }
 .board-legend .lg.pending { background: var(--amber); }
 .board-legend .lg.hold { background: #7c3aed; }
 .board-legend .lg.closure { background: var(--gray); }
@@ -1031,7 +1083,7 @@ a:hover { text-decoration: underline; }
     position: relative;
   }
   .m-tl-slot:active { filter: brightness(0.96); }
-  .m-tl-slot.is-booking { background: var(--blue); }
+  .m-tl-slot.is-booking { background: #2f9d62; }
   .m-tl-slot.is-pending { background: var(--amber); }
   .m-tl-slot.is-hold { background: #7c3aed; }
   .m-tl-slot.is-closure { background: var(--gray); }

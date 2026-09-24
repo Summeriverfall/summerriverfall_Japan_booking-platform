@@ -71,6 +71,12 @@
     .res-type-hint {
       font-size: .72rem; color: var(--muted); margin: -.1rem 0 .35rem; line-height: 1.45;
     }
+    .edit-lang-chip {
+      display: inline-flex; align-items: center; gap: .35rem;
+      margin: 0 0 .45rem; padding: .2rem .55rem;
+      border-radius: 999px; background: rgba(154,115,72,.12);
+      color: #6b4f28; font-size: .75rem; font-weight: 600;
+    }
     .res-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
     .res-actions .btn {
       border: 1px solid var(--line); background: #fff; border-radius: 8px;
@@ -103,17 +109,21 @@
     <div class="store-grid" id="storeGrid"></div>
   </main>
 
-  <script src="stores.js?v=20260923-hours2"></script>
-  <script src="desk-i18n.js?v=20260923-hours2"></script>
+  <script src="stores.js?v=20260923-hours3"></script>
+  <script src="desk-i18n.js?v=20260923-hours3"></script>
   <script>
     StoreRegistry.setRole('admin');
     const grid = document.getElementById('storeGrid');
     const btnEdit = document.getElementById('btnEditResources');
     const editHint = document.getElementById('editHint');
     let editing = false;
+    const drafts = {};
+    let formLang = DeskI18n.getLang();
 
     DeskI18n.mountSwitch(document.getElementById('portalLangMount'));
     DeskI18n.onChange(() => {
+      if (editing) harvestAll(formLang);
+      formLang = DeskI18n.getLang();
       DeskI18n.applyDom();
       document.title = DeskI18n.t('adminPortalTitle');
       btnEdit.textContent = editing ? DeskI18n.t('doneEdit') : DeskI18n.t('editResources');
@@ -146,19 +156,97 @@
       return DeskI18n.storeName(s);
     }
 
+    function asNameMap(name) {
+      if (name && typeof name === 'object') {
+        return {
+          jp: String(name.jp || ''),
+          cn: String(name.cn || ''),
+          en: String(name.en || ''),
+        };
+      }
+      const s = String(name || '');
+      return { jp: s, cn: s, en: s };
+    }
+
+    function nameForLang(name, lang) {
+      const m = asNameMap(name);
+      return String(m[lang] || m.jp || m.cn || m.en || '').trim();
+    }
+
+    function storeForEdit(s) {
+      const d = drafts[s.storeId];
+      if (!d) return s;
+      return Object.assign({}, s, {
+        bedCount: d.bedCount != null ? d.bedCount : s.bedCount,
+        bedLabels: d.bedLabels || s.bedLabels,
+        courses: d.courses || s.courses,
+      });
+    }
+
+    function harvestCard(card, lang) {
+      if (!card) return;
+      const storeId = card.getAttribute('data-store');
+      if (!storeId) return;
+      const base = storeForEdit(StoreRegistry.getStore(storeId) || {});
+      const countEl = card.querySelector('[data-count]');
+      const count = Number(countEl && countEl.value) || 1;
+      const prevLabels = (base.bedLabels || []).slice();
+      const bedLabels = [...card.querySelectorAll('[data-labels] [data-row]')].map((row, i) => {
+        const prev = asNameMap(prevLabels[i]);
+        const typed = String((row.querySelector('[data-name]') || {}).value || '').trim();
+        const typeId = (row.querySelector('[data-type]') || {}).value || 'single';
+        prev[lang] = typed;
+        return { typeId, jp: prev.jp, cn: prev.cn, en: prev.en };
+      });
+      const prevCourses = (base.courses || []).slice();
+      const coursesEl = card.querySelector('[data-courses]');
+      const courses = String((coursesEl && coursesEl.value) || '')
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line, i) => {
+          const parts = line.split('|');
+          const rawId =
+            parts.length >= 2
+              ? parts[0]
+              : (prevCourses[i] && prevCourses[i].id) || `course-${i + 1}`;
+          const id =
+            String(rawId || '')
+              .trim()
+              .replace(/\s+/g, '-') || `course-${i + 1}`;
+          const label = (parts.length >= 2 ? parts.slice(1).join('|') : line).trim();
+          const prev = prevCourses.find((c) => c && c.id === id) || prevCourses[i] || {};
+          const names = asNameMap(prev.name);
+          names[lang] = label;
+          const out = { id, name: names };
+          if (prev.durationMinutes != null) out.durationMinutes = prev.durationMinutes;
+          if (prev.price != null) out.price = prev.price;
+          return out;
+        });
+      drafts[storeId] = { bedCount: count, bedLabels, courses };
+    }
+
+    function harvestAll(lang) {
+      grid.querySelectorAll('.store-card').forEach((card) => harvestCard(card, lang));
+    }
+
     function typeOptionLabel(t) {
       const lang = DeskI18n.getLang();
       return t[lang] || t.jp || t.cn || t.en || t.id;
+    }
+
+    function langLabel() {
+      const lang = DeskI18n.getLang();
+      if (lang === 'cn') return DeskI18n.t('editLangCn');
+      if (lang === 'en') return DeskI18n.t('editLangEn');
+      return DeskI18n.t('editLangJp');
     }
 
     function resourceRowHtml(currentLabel, index, canEdit) {
       const types = StoreRegistry.listResourceTypes();
       const selectedId =
         StoreRegistry.matchResourceTypeId(currentLabel) || (types[0] && types[0].id) || '';
-      const nameText =
-        typeof currentLabel === 'object'
-          ? currentLabel.jp || currentLabel.cn || currentLabel.en || ''
-          : String(currentLabel || '');
+      const nameText = nameForLang(currentLabel, DeskI18n.getLang());
       const opts = types
         .map((t) => {
           const sel = t.id === selectedId ? ' selected' : '';
@@ -175,8 +263,10 @@
 
     function render() {
       const stores = StoreRegistry.listStores();
+      const lang = DeskI18n.getLang();
       grid.innerHTML = stores
-        .map((s) => {
+        .map((raw) => {
+          const s = storeForEdit(raw);
           const labels = (s.bedLabels || [])
             .map((name, i) => resourceRowHtml(name, i, editing))
             .join('');
@@ -197,6 +287,8 @@
               <span class="entry-go">${escapeHtml(DeskI18n.t('enterStore'))}</span>
             </a>
             <div class="res-edit">
+              <div class="edit-lang-chip">${escapeHtml(DeskI18n.t('editLangNow'))}：${escapeHtml(langLabel())}</div>
+              <p class="res-type-hint">${escapeHtml(DeskI18n.t('editLangHint'))}</p>
               <label>${escapeHtml(DeskI18n.t('storeHours'))}</label>
               <p class="res-type-hint">${escapeHtml(DeskI18n.t('hoursHint'))}</p>
               <div class="res-hours">
@@ -225,10 +317,7 @@
               <textarea data-courses rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:.45rem .55rem;font:inherit;line-height:1.45">${escapeHtml(
                 (s.courses || [])
                   .map((c) => {
-                    const label =
-                      typeof c.name === 'object'
-                        ? c.name.jp || c.name.cn || c.name.en || ''
-                        : c.name;
+                    const label = nameForLang(c.name, lang);
                     return c.id ? `${c.id}|${label}` : label;
                   })
                   .join('\n')
@@ -248,23 +337,22 @@
           const card = input.closest('.store-card');
           const n = Math.max(1, Math.min(20, Number(input.value) || 1));
           input.value = String(n);
-          const box = card.querySelector('[data-labels]');
-          const cur = [...box.querySelectorAll('[data-row]')].map((row) => ({
-            name: row.querySelector('[data-name]').value,
-            typeId: row.querySelector('[data-type]').value,
-          }));
+          harvestCard(card, DeskI18n.getLang());
+          const storeId = card.getAttribute('data-store');
+          const draft = drafts[storeId] || {};
           const types = StoreRegistry.listResourceTypes();
           const fallback = types[0] ? types[0].id : 'single';
-          while (cur.length < n) cur.push({ name: String.fromCharCode(65 + cur.length), typeId: fallback });
-          box.innerHTML = cur
-            .slice(0, n)
-            .map((row, i) =>
-              resourceRowHtml(
-                { jp: row.name || String.fromCharCode(65 + i), typeId: row.typeId || fallback },
-                i,
-                true
-              )
-            )
+          const labels = (draft.bedLabels || []).slice();
+          while (labels.length < n) {
+            const letter = String.fromCharCode(65 + labels.length);
+            labels.push({ jp: letter, cn: letter, en: letter, typeId: fallback });
+          }
+          draft.bedCount = n;
+          draft.bedLabels = labels.slice(0, n);
+          drafts[storeId] = draft;
+          const box = card.querySelector('[data-labels]');
+          box.innerHTML = draft.bedLabels
+            .map((row, i) => resourceRowHtml(row, i, true))
             .join('');
         });
       });
@@ -273,21 +361,9 @@
         btn.addEventListener('click', () => {
           const card = btn.closest('.store-card');
           const storeId = card.getAttribute('data-store');
-          const count = Number(card.querySelector('[data-count]').value) || 1;
-          const bedLabels = [...card.querySelectorAll('[data-labels] [data-row]')].map((row, i) => {
-            const name =
-              String(row.querySelector('[data-name]').value || '').trim() ||
-              String.fromCharCode(65 + i);
-            const typeId = row.querySelector('[data-type]').value || 'single';
-            const t = StoreRegistry.findResourceTypeById(typeId);
-            return {
-              typeId,
-              jp: name,
-              cn: name,
-              en: name,
-              ...(t ? {} : {}),
-            };
-          });
+          harvestCard(card, DeskI18n.getLang());
+          const draft = drafts[storeId] || {};
+          const count = Number(card.querySelector('[data-count]').value) || draft.bedCount || 1;
           const base = StoreRegistry.getStore(storeId) || {};
           const open = parseTimeInput(
             card.querySelector('[data-open]'),
@@ -306,24 +382,10 @@
           ) {
             overnight = true;
           }
-          const courses = String(card.querySelector('[data-courses]').value || '')
-            .split(/\n+/)
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((line, i) => {
-              const parts = line.split('|');
-              if (parts.length >= 2) {
-                return {
-                  id: parts[0].trim() || `course-${i + 1}`,
-                  name: parts.slice(1).join('|').trim(),
-                };
-              }
-              return { id: `course-${i + 1}`, name: line };
-            });
           StoreRegistry.setResourceOverride(storeId, {
             bedCount: count,
-            bedLabels,
-            courses,
+            bedLabels: draft.bedLabels,
+            courses: draft.courses,
             openHour: open.h,
             openMinute: open.min,
             closeHour: close.h,
@@ -331,6 +393,7 @@
             overnight,
             minGapMinutes: Number((card.querySelector('[data-gap]') || {}).value) || 0,
           });
+          delete drafts[storeId];
           const msg = card.querySelector('[data-msg]');
           msg.className = 'res-msg ok';
           msg.textContent = DeskI18n.t('savedRes');
@@ -342,6 +405,7 @@
         btn.addEventListener('click', () => {
           const card = btn.closest('.store-card');
           const storeId = card.getAttribute('data-store');
+          delete drafts[storeId];
           StoreRegistry.clearResourceOverride(storeId);
           const msg = card.querySelector('[data-msg]');
           msg.className = 'res-msg ok';
@@ -352,6 +416,11 @@
     }
 
     btnEdit.addEventListener('click', () => {
+      if (editing) harvestAll(formLang);
+      else {
+        Object.keys(drafts).forEach((k) => delete drafts[k]);
+        formLang = DeskI18n.getLang();
+      }
       editing = !editing;
       btnEdit.classList.toggle('is-on', editing);
       btnEdit.textContent = editing ? DeskI18n.t('doneEdit') : DeskI18n.t('editResources');

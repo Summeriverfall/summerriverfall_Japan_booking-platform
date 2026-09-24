@@ -20,8 +20,30 @@ function canConnect(port, host = '127.0.0.1') {
   });
 }
 
+function proxyPortFromEnv() {
+  const raw = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  const m = String(raw).match(/:(\d+)(?:\/|$)/);
+  return m ? Number(m[1]) : null;
+}
+
+function clearProxyEnv() {
+  delete process.env.HTTPS_PROXY;
+  delete process.env.HTTP_PROXY;
+  delete process.env.https_proxy;
+  delete process.env.http_proxy;
+}
+
 async function ensureProxy() {
-  if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) return;
+  const existing = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  if (existing) {
+    const port = proxyPortFromEnv();
+    if (port && (await canConnect(port))) {
+      console.log('[calendar] 使用代理', existing);
+      return;
+    }
+    console.warn('[calendar] 配置的代理不可用，改为直连', existing);
+    clearProxyEnv();
+  }
   const candidates = [7897, 7890, 7891, 10809, 10808, 1080, 6152, 20171];
   for (const port of candidates) {
     // eslint-disable-next-line no-await-in-loop
@@ -33,7 +55,7 @@ async function ensureProxy() {
       return;
     }
   }
-  console.warn('[calendar] 未检测到本机代理，直连 Google 可能超时');
+  console.warn('[calendar] 未检测到本机代理，直连 Google');
 }
 
 function getOAuthClient() {

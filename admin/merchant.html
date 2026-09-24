@@ -1,10 +1,10 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>店舗側</title>
-  <link rel="stylesheet" href="styles.css?v=20260923-cal13">
+  <link rel="stylesheet" href="styles.css?v=20260924-cal19">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body class="page-merchant">
@@ -21,7 +21,14 @@
 
   <main class="wrap">
     <div class="toolbar">
-      <div class="field"><label data-i18n="businessDay">営業日</label><input type="date" id="dateInput"></div>
+      <div class="field field-date">
+        <label data-i18n="businessDay">営業日</label>
+        <div class="date-step">
+          <button type="button" class="btn date-step-btn" id="btnPrevDay" data-i18n-title="prevDay" title="前の日">‹</button>
+          <input type="date" id="dateInput">
+          <button type="button" class="btn date-step-btn" id="btnNextDay" data-i18n-title="nextDay" title="次の日">›</button>
+        </div>
+      </div>
       <button class="btn" type="button" id="btnRefresh" data-i18n="refreshBoard">ボード更新</button>
       <button class="btn" type="button" id="btnImportCal" data-i18n="importCalendar">カレンダーから取込</button>
       <span class="hint" id="remainHint"></span>
@@ -136,14 +143,14 @@
   </div>
   <div class="m-sheet-scrim m-only" id="mSheetScrim" hidden></div>
 
-  <script src="stores.js?v=20260923-cal13"></script>
-  <script src="store.js?v=20260923-cal13"></script>
-  <script src="desk-i18n.js?v=20260923-cal13"></script>
-  <script src="board-render.js?v=20260923-cal13"></script>
-  <script src="wa-parse.js?v=20260923-cal13"></script>
-  <script src="email-config.js?v=20260923-cal13"></script>
-  <script src="email-client.js?v=20260923-cal13"></script>
-  <script src="calendar-import.js?v=20260923-cal13"></script>
-  <script src="merchant-app.js?v=20260923-cal13"></script>
+  <script src="stores.js?v=20260924-cal18"></script>
+  <script src="store.js?v=20260924-cal18"></script>
+  <script src="desk-i18n.js?v=20260924-cal19"></script>
+  <script src="board-render.js?v=20260924-cal19"></script>
+  <script src="wa-parse.js?v=20260924-cal18"></script>
+  <script src="email-config.js?v=20260924-cal18"></script>
+  <script src="email-client.js?v=20260924-cal18"></script>
+  <script src="calendar-import.js?v=20260924-cal20"></script>
+  <script src="merchant-app.js?v=20260924-cal18"></script>
 </body>
 </html>

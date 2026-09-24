@@ -171,6 +171,21 @@
     return dateInput.value || BookingStore.todayBusinessDate();
   }
 
+  function shiftYmd(ymd, days) {
+    const [y, m, d] = String(ymd || '').split('-').map(Number);
+    const dt = new Date(y || 2026, (m || 1) - 1, d || 1);
+    dt.setDate(dt.getDate() + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  function shiftBusinessDate(delta) {
+    dateInput.value = shiftYmd(currentDate(), delta);
+    dateInput.dispatchEvent(new Event('change'));
+  }
+
   function renderSideBeds(selected) {
     const set = new Set((selected || []).map(Number));
     sideBeds.innerHTML = STORE_CONFIG.bedLabels
@@ -1594,6 +1609,10 @@
       btnImportCal.disabled = false;
     });
   }
+  const btnPrevDay = document.getElementById('btnPrevDay');
+  const btnNextDay = document.getElementById('btnNextDay');
+  if (btnPrevDay) btnPrevDay.addEventListener('click', () => shiftBusinessDate(-1));
+  if (btnNextDay) btnNextDay.addEventListener('click', () => shiftBusinessDate(1));
   dateInput.addEventListener('change', () => {
     selectedClosureId = null;
     selectedBookingId = null;

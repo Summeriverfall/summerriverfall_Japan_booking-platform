@@ -152,9 +152,9 @@
     return Boolean(document.querySelector('.board.is-dragging, .board.is-editing-block'));
   }
 
-  function isLocalBoard() {
+  function isPagesPreview() {
     const host = String((location && location.hostname) || '');
-    return host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+    return /\.github\.io$/i.test(host);
   }
 
   function pagesPreviewStatus() {
@@ -166,7 +166,7 @@
   }
 
   async function pullOnce(getDate, onStatus) {
-    if (!isLocalBoard()) {
+    if (isPagesPreview()) {
       if (onStatus) onStatus(pagesPreviewStatus());
       return;
     }
@@ -197,7 +197,7 @@
     const onStatus = opts.onStatus;
     const intervalMs = Number(opts.intervalMs) || 30000;
     stopAutoSync();
-    if (!isLocalBoard()) {
+    if (isPagesPreview()) {
       if (onStatus) onStatus(pagesPreviewStatus());
       return;
     }
@@ -224,15 +224,27 @@
       return result.hint || pagesPreviewStatus().hint;
     }
     if (!result.ok) {
-      return `日历未同步：${result.error || '网关不可用'}（须本机打开看板）`;
+      const err = String(result.error || '');
+      if (/7897|ECONNREFUSED|proxy/i.test(err)) {
+        return '日历未同步：本机代理没开。请打开 Clash/VPN 后点「立即同步日历」。';
+      }
+      return `日历未同步：${result.error || '网关不可用'}`;
     }
-    const shown = Number(result.imported || 0) + Number(result.updated || 0);
+    let count =
+      Number(result.imported || 0) +
+      Number(result.updated || 0) +
+      Number(result.linked || 0);
+    if (global.BookingStore && result.date && BookingStore.listBookings) {
+      count = BookingStore.listBookings(result.date).filter(
+        (b) => b.status !== 'cancelled'
+      ).length;
+    }
     const extra = [];
     if (result.imported) extra.push(`新 ${result.imported}`);
     if (result.updated) extra.push(`改 ${result.updated}`);
     if (result.removed) extra.push(`撤 ${result.removed}`);
     const tail = extra.length ? ` · ${extra.join(' / ')}` : '';
-    return `日历已同步${tail || ` · 当日 ${shown} 笔`}`;
+    return `日历已同步 · 当日 ${count} 笔${tail}`;
   }
 
   global.CalendarImport = {
