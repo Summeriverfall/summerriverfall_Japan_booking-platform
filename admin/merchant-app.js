@@ -171,6 +171,9 @@
     return dateInput.value || BookingStore.todayBusinessDate();
   }
 
+  let boardView = 'day';
+  let listRange = 'week';
+
   function shiftYmd(ymd, days) {
     const [y, m, d] = String(ymd || '').split('-').map(Number);
     const dt = new Date(y || 2026, (m || 1) - 1, d || 1);
@@ -181,9 +184,59 @@
     return `${yy}-${mm}-${dd}`;
   }
 
+  function shiftMonth(ymd, delta) {
+    const [y, m, d] = String(ymd || '').split('-').map(Number);
+    const dt = new Date(y || 2026, (m || 1) - 1 + delta, 1);
+    const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+    const day = Math.min(d || 1, last);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
   function shiftBusinessDate(delta) {
-    dateInput.value = shiftYmd(currentDate(), delta);
+    if (boardView === 'list') return;
+    dateInput.value =
+      boardView === 'month' ? shiftMonth(currentDate(), delta) : shiftYmd(currentDate(), delta);
     dateInput.dispatchEvent(new Event('change'));
+  }
+
+  function updateViewToggle() {
+    const dayBtn = document.getElementById('btnViewDay');
+    const monthBtn = document.getElementById('btnViewMonth');
+    const listBtn = document.getElementById('btnViewList');
+    if (dayBtn) dayBtn.classList.toggle('is-on', boardView === 'day');
+    if (monthBtn) monthBtn.classList.toggle('is-on', boardView === 'month');
+    if (listBtn) listBtn.classList.toggle('is-on', boardView === 'list');
+    const dateField = document.querySelector('.field-date');
+    const rangeField = document.getElementById('listRangeField');
+    if (dateField) dateField.hidden = boardView === 'list';
+    if (rangeField) rangeField.hidden = boardView !== 'list';
+    ['Week', 'Month', 'All'].forEach((key) => {
+      const btn = document.getElementById(`btnRange${key}`);
+      if (btn) btn.classList.toggle('is-on', listRange === key.toLowerCase());
+    });
+    const prev = document.getElementById('btnPrevDay');
+    const next = document.getElementById('btnNextDay');
+    if (prev) prev.title = DeskI18n.t(boardView === 'month' ? 'prevMonth' : 'prevDay');
+    if (next) next.title = DeskI18n.t(boardView === 'month' ? 'nextMonth' : 'nextDay');
+  }
+
+  function filterUpcoming(items) {
+    const from = BookingStore.todayBusinessDate();
+    if (listRange === 'all') return items || [];
+    const days = listRange === 'week' ? 6 : 29;
+    const end = shiftYmd(from, days);
+    return (items || []).filter((b) => b && b.date <= end);
+  }
+
+  function enterListView() {
+    boardView = 'list';
+    refresh();
+    if (CalendarImport.syncUpcoming) {
+      CalendarImport.syncUpcoming(onCalSync, 365);
+    }
   }
 
   function renderSideBeds(selected) {
@@ -573,6 +626,11 @@
         <div>人数：${booking.guests || 1}</div>
         <div>渠道：${(channel && channel.name) || booking.channelId || '—'}</div>
         <div>备注：${booking.note || '—'}</div>
+        ${
+          BookingStore.recordedOnLabel && BookingStore.recordedOnLabel(booking)
+            ? `<div>${BookingStore.recordedOnLabel(booking)}</div>`
+            : ''
+        }
         <div class="hint" style="margin-top:.35rem">${
           pending ? DeskI18n.t('bookingConfirmHint') : DeskI18n.t('bookingReadonly')
         }</div>
@@ -996,8 +1054,77 @@
   function refresh() {
     const date = currentDate();
     dateInput.value = date;
+    updateViewToggle();
     renderDaySummary(date);
     renderOccStrip(date);
+
+    if (boardView === 'month') {
+      const mobile = isMobileMerchant();
+      const target = mobile ? document.getElementById('mTimeline') : boardEl;
+      if (mobile && boardEl) boardEl.innerHTML = '';
+      if (!mobile) {
+        const tl = document.getElementById('mTimeline');
+        if (tl) tl.innerHTML = '';
+      }
+      BoardUI.renderMonth(target, date, {
+        onDayClick: (ymd) => {
+          boardView = 'day';
+          dateInput.value = ymd;
+          updateViewToggle();
+          refresh();
+          CalendarImport.syncNow(currentDate, onCalSync);
+        },
+        onBookingSelect: (booking, point) => {
+          if (booking.date) dateInput.value = booking.date;
+          openBookingView(booking, point);
+        },
+      });
+      remainHint.textContent = '';
+      return;
+    }
+
+    if (boardView === 'list') {
+      const mobile = isMobileMerchant();
+      const target = mobile ? document.getElementById('mTimeline') : boardEl;
+      if (mobile && boardEl) boardEl.innerHTML = '';
+      if (!mobile) {
+        const tl = document.getElementById('mTimeline');
+        if (tl) tl.innerHTML = '';
+      }
+      document.querySelectorAll('.card-board > h2').forEach((el) => {
+        el.textContent = DeskI18n.t('upcomingTitle');
+      });
+      document.querySelectorAll('.card-board > .hint').forEach((el) => {
+        el.textContent = DeskI18n.t('upcomingHint');
+      });
+      const items = filterUpcoming(
+        BookingStore.listUpcomingBookings
+          ? BookingStore.listUpcomingBookings(BookingStore.todayBusinessDate())
+          : []
+      );
+      BoardUI.renderAgenda(target, items, {
+        onBookingSelect: (booking, point) => {
+          boardView = 'day';
+          if (booking.date) dateInput.value = booking.date;
+          updateViewToggle();
+          refresh();
+          openBookingView(booking, point);
+        },
+      });
+      remainHint.textContent = items.length
+        ? `${DeskI18n.t('upcomingTitle')} · ${items.length}`
+        : DeskI18n.t('upcomingEmpty');
+      return;
+    }
+
+    const deskTitle = document.querySelector('.card-board.desk-only > h2');
+    const deskHint = document.querySelector('.card-board.desk-only > p.hint');
+    const mobTitle = document.querySelector('.card-board.m-only > h2');
+    const mobHint = document.getElementById('mTimelineHint');
+    if (deskTitle) deskTitle.textContent = DeskI18n.t('boardTitle');
+    if (deskHint) deskHint.textContent = DeskI18n.t('boardHint');
+    if (mobTitle) mobTitle.textContent = DeskI18n.t('timelineTitle');
+    if (mobHint) mobHint.textContent = DeskI18n.t('timelineHint');
 
     if (isMobileMerchant()) {
       renderMobileTimeline(date);
@@ -1588,7 +1715,11 @@
 
   function onCalSync(result) {
     setCalHint(result);
-    if (result && result.ok && (result.imported || result.updated || result.removed)) {
+    if (
+      result &&
+      result.ok &&
+      (result.imported || result.updated || result.removed || result.upcoming != null)
+    ) {
       refresh();
     }
   }
@@ -1598,14 +1729,18 @@
   if (btnImportCal) {
     btnImportCal.addEventListener('click', async () => {
       btnImportCal.disabled = true;
-      await CalendarImport.syncNow(currentDate, (r) => {
-        onCalSync(r);
-        if (!r.ok) {
-          alert(
-            `同步失败：${r.error || '网关不可用'}\n\n请用本机 http://127.0.0.1:8787/merchant.html 打开看板，并保证这台电脑能访问 Google。`
-          );
-        }
-      });
+      const pull =
+        boardView === 'list' && CalendarImport.syncUpcoming
+          ? CalendarImport.syncUpcoming(onCalSync, 365)
+          : CalendarImport.syncNow(currentDate, (r) => {
+              onCalSync(r);
+              if (!r.ok) {
+                alert(
+                  `同步失败：${r.error || '网关不可用'}\n\n请用本机 http://127.0.0.1:8787/merchant.html 打开看板，并保证这台电脑能访问 Google。`
+                );
+              }
+            });
+      await pull;
       btnImportCal.disabled = false;
     });
   }
@@ -1613,6 +1748,45 @@
   const btnNextDay = document.getElementById('btnNextDay');
   if (btnPrevDay) btnPrevDay.addEventListener('click', () => shiftBusinessDate(-1));
   if (btnNextDay) btnNextDay.addEventListener('click', () => shiftBusinessDate(1));
+  const btnViewDay = document.getElementById('btnViewDay');
+  const btnViewMonth = document.getElementById('btnViewMonth');
+  const btnViewList = document.getElementById('btnViewList');
+  if (btnViewDay) {
+    btnViewDay.addEventListener('click', () => {
+      boardView = 'day';
+      refresh();
+    });
+  }
+  if (btnViewMonth) {
+    btnViewMonth.addEventListener('click', () => {
+      boardView = 'month';
+      refresh();
+    });
+  }
+  if (btnViewList) {
+    btnViewList.addEventListener('click', () => enterListView());
+  }
+  const btnToday = document.getElementById('btnToday');
+  if (btnToday) {
+    btnToday.addEventListener('click', () => {
+      boardView = boardView === 'list' ? 'day' : boardView;
+      dateInput.value = BookingStore.todayBusinessDate();
+      dateInput.dispatchEvent(new Event('change'));
+    });
+  }
+  [
+    ['btnRangeWeek', 'week'],
+    ['btnRangeMonth', 'month'],
+    ['btnRangeAll', 'all'],
+  ].forEach(([id, range]) => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        listRange = range;
+        refresh();
+      });
+    }
+  });
   dateInput.addEventListener('change', () => {
     selectedClosureId = null;
     selectedBookingId = null;
@@ -1638,8 +1812,17 @@
   setInterval(softRefresh, 5000);
 
   renderSideBeds([]);
-  dateInput.value = BookingStore.todayBusinessDate();
+  const bootQuery = new URLSearchParams(location.search);
+  const bootDate = bootQuery.get('date');
+  dateInput.value =
+    /^\d{4}-\d{2}-\d{2}$/.test(bootDate || '')
+      ? bootDate
+      : BookingStore.todayBusinessDate();
+  if ((bootQuery.get('view') || '') === 'list') boardView = 'list';
   refresh();
+  if (boardView === 'list' && CalendarImport.syncUpcoming) {
+    CalendarImport.syncUpcoming(onCalSync, 365);
+  }
   CalendarImport.startAutoSync({
     getDate: currentDate,
     onStatus: onCalSync,

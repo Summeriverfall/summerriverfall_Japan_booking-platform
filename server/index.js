@@ -159,6 +159,8 @@ app.post('/calendar/events', requireApiKey, async (req, res) => {
       description: ev.description || '',
       start: ev.start || null,
       end: ev.end || null,
+      created: ev.created || '',
+      updated: ev.updated || '',
       extendedProperties: ev.extendedProperties || null,
     }));
     res.json({ ok: true, items, count: items.length });
@@ -267,12 +269,14 @@ app.post('/calendar/cleanup-day', requireApiKey, async (req, res) => {
  */
 app.post('/calendar/rewrite-day', requireApiKey, async (req, res) => {
   try {
-    const { calendarId, date, events } = req.body || {};
+    const { calendarId, date, events, shared } = req.body || {};
     if (!calendarId || !date) {
       res.status(400).json({ ok: false, error: '缺少 calendarId / date' });
       return;
     }
-    const result = await calendar.rewriteDay(calendarId, date, events || []);
+    const result = await calendar.rewriteDay(calendarId, date, events || [], {
+      shared: Boolean(shared),
+    });
     res.json(result);
   } catch (err) {
     console.error('[calendar] rewrite-day failed', err);

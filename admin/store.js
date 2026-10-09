@@ -919,6 +919,32 @@
       .sort((a, b) => timeToOffset(a.startTime) - timeToOffset(b.startTime));
   }
 
+  function listBookingsInRange(startYmd, endYmd) {
+    return load()
+      .bookings.filter(
+        (b) =>
+          b.date >= startYmd &&
+          b.date <= endYmd &&
+          b.status !== 'cancelled'
+      )
+      .sort(
+        (a, b) =>
+          String(a.date).localeCompare(String(b.date)) ||
+          timeToOffset(a.startTime) - timeToOffset(b.startTime)
+      );
+  }
+
+  function listUpcomingBookings(fromYmd) {
+    const from = fromYmd || todayBusinessDate();
+    return load()
+      .bookings.filter((b) => b.status !== 'cancelled' && b.date >= from)
+      .sort(
+        (a, b) =>
+          String(a.date).localeCompare(String(b.date)) ||
+          timeToOffset(a.startTime) - timeToOffset(b.startTime)
+      );
+  }
+
   function listClosures(dateStr) {
     return load().closures.filter((c) => c.date === dateStr && c.active !== false);
   }
@@ -998,6 +1024,10 @@
       changed = true;
     }
     if (parsed.googleEventLink) already.googleEventLink = parsed.googleEventLink;
+    if (parsed.googleCreatedAt && already.googleCreatedAt !== parsed.googleCreatedAt) {
+      already.googleCreatedAt = parsed.googleCreatedAt;
+      changed = true;
+    }
     already.googleCalendarId = cfg.googleCalendarId || already.googleCalendarId;
     already.googleSyncedAt = new Date().toISOString();
     const nextIssues = (parsed.issues || []).slice();
@@ -1124,9 +1154,10 @@
         guestPhone: parsed.guestPhone || '',
         note: parsed.note || '',
         status: 'confirmed',
-        createdAt: new Date().toISOString(),
+        createdAt: parsed.googleCreatedAt || new Date().toISOString(),
         confirmedAt: new Date().toISOString(),
         source: 'google-calendar',
+        googleCreatedAt: parsed.googleCreatedAt || null,
         googleEventId: parsed.googleEventId || null,
         googleEventLink: parsed.googleEventLink || '',
         googleCalendarId: cfg.googleCalendarId || null,
@@ -1183,6 +1214,39 @@
     };
   }
 
+  function recordedAtOf(b) {
+    if (!b) return '';
+    return String(b.googleCreatedAt || b.recordedAt || b.createdAt || '').trim();
+  }
+
+  function formatRecordedMd(iso, lang) {
+    const raw = String(iso || '').trim();
+    if (!raw) return '';
+    let m;
+    let d;
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+      m = Number(raw.slice(5, 7));
+      d = Number(raw.slice(8, 10));
+    } else {
+      const dt = new Date(raw);
+      if (Number.isNaN(dt.getTime())) return '';
+      const p = tokyoParts(dt);
+      m = p.month;
+      d = p.day;
+    }
+    const L = lang || (global.DeskI18n && DeskI18n.getLang && DeskI18n.getLang()) || 'jp';
+    if (L === 'en') return m + '/' + d;
+    return m + '月' + d + '日';
+  }
+
+  function recordedOnLabel(b, lang) {
+    const md = formatRecordedMd(recordedAtOf(b), lang);
+    if (!md) return '';
+    const tpl =
+      global.DeskI18n && DeskI18n.t ? DeskI18n.t('recordedOn') : '计入 {date}';
+    return String(tpl).replace('{date}', md);
+  }
+
   function resetAll() {
     localStorage.removeItem(CFG().storageKey);
     save(emptyState());
@@ -1233,12 +1297,17 @@
     setDailyEmailTime,
     listCalendarIssues,
     listBookings,
+    listBookingsInRange,
+    listUpcomingBookings,
     listClosures,
     appendEmailLog,
     setGoogleEvent,
     exportJson,
     importJson,
     importFromCalendarEvents,
+    recordedAtOf,
+    formatRecordedMd,
+    recordedOnLabel,
     resetAll,
     allBedIndexes,
   };

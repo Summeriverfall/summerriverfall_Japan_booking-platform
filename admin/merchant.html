@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>店舗側</title>
-  <link rel="stylesheet" href="styles.css?v=20260924-cal19">
+  <link rel="stylesheet" href="styles.css?v=20261009-rec2">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body class="page-merchant">
@@ -21,13 +21,27 @@
 
   <main class="wrap">
     <div class="toolbar">
-      <div class="field field-date">
+      <div class="field field-date" id="dateField">
         <label data-i18n="businessDay">営業日</label>
         <div class="date-step">
           <button type="button" class="btn date-step-btn" id="btnPrevDay" data-i18n-title="prevDay" title="前の日">‹</button>
           <input type="date" id="dateInput">
           <button type="button" class="btn date-step-btn" id="btnNextDay" data-i18n-title="nextDay" title="次の日">›</button>
+          <button type="button" class="btn btn-today" id="btnToday" data-i18n="today">今日</button>
         </div>
+      </div>
+      <div class="field field-range" id="listRangeField" hidden>
+        <label data-i18n="upcomingRange">表示範囲</label>
+        <div class="view-switch" role="group" aria-label="Range">
+          <button type="button" id="btnRangeWeek" class="is-on" data-i18n="rangeWeek">1週間</button>
+          <button type="button" id="btnRangeMonth" data-i18n="rangeMonth">1ヶ月</button>
+          <button type="button" id="btnRangeAll" data-i18n="rangeAll">すべて</button>
+        </div>
+      </div>
+      <div class="view-switch" role="group" aria-label="View">
+        <button type="button" id="btnViewDay" class="is-on" data-i18n="viewDay">日</button>
+        <button type="button" id="btnViewMonth" data-i18n="viewMonth">月</button>
+        <button type="button" id="btnViewList" data-i18n="viewList">リスト</button>
       </div>
       <button class="btn" type="button" id="btnRefresh" data-i18n="refreshBoard">ボード更新</button>
       <button class="btn" type="button" id="btnImportCal" data-i18n="importCalendar">カレンダーから取込</button>
@@ -143,14 +157,14 @@
   </div>
   <div class="m-sheet-scrim m-only" id="mSheetScrim" hidden></div>
 
-  <script src="stores.js?v=20260924-cal18"></script>
-  <script src="store.js?v=20260924-cal18"></script>
-  <script src="desk-i18n.js?v=20260924-cal19"></script>
-  <script src="board-render.js?v=20260924-cal19"></script>
-  <script src="wa-parse.js?v=20260924-cal18"></script>
-  <script src="email-config.js?v=20260924-cal18"></script>
-  <script src="email-client.js?v=20260924-cal18"></script>
-  <script src="calendar-import.js?v=20260924-cal20"></script>
-  <script src="merchant-app.js?v=20260924-cal18"></script>
+  <script src="stores.js?v=20261009-rec2"></script>
+  <script src="store.js?v=20261009-rec2"></script>
+  <script src="desk-i18n.js?v=20261009-rec2"></script>
+  <script src="board-render.js?v=20261009-rec2"></script>
+  <script src="wa-parse.js?v=20261009-rec2"></script>
+  <script src="email-config.js?v=20261009-rec2"></script>
+  <script src="email-client.js?v=20261009-rec2"></script>
+  <script src="calendar-import.js?v=20261009-rec2"></script>
+  <script src="merchant-app.js?v=20261009-rec2"></script>
 </body>
 </html>

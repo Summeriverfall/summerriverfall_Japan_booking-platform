@@ -255,7 +255,11 @@
         Number.isFinite(opts.selection.endOffset) &&
         drag.startOff >= opts.selection.startOffset &&
         drag.startOff < opts.selection.endOffset;
-      if (clickInCurrentSelection && opts.onCancelSelection) {
+      if (
+        !movedFar &&
+        opts.onCancelSelection &&
+        (clickInCurrentSelection || opts.selectedBookingId || opts.selectedClosureId)
+      ) {
         wrap.querySelectorAll('.board-selection').forEach((s) => {
           s.hidden = true;
         });
@@ -1097,8 +1101,340 @@
     };
   }
 
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  function toYmd(y, m, d) {
+    return `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+
+  function monthGrid(year, month, weekStart) {
+    const startWeek = weekStart == null ? 0 : weekStart;
+    const first = new Date(year, month - 1, 1);
+    const lead = (first.getDay() - startWeek + 7) % 7;
+    const start = new Date(year, month - 1, 1 - lead);
+    const cells = [];
+    for (let i = 0; i < 42; i += 1) {
+      const dt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const y = dt.getFullYear();
+      const m = dt.getMonth() + 1;
+      const d = dt.getDate();
+      cells.push({
+        date: toYmd(y, m, d),
+        day: d,
+        inMonth: m === month && y === year,
+      });
+    }
+    return cells;
+  }
+
+  function weekdayLabels() {
+    const lang = global.DeskI18n ? DeskI18n.getLang() : 'jp';
+    if (lang === 'cn') return ['日', '一', '二', '三', '四', '五', '六'];
+    if (lang === 'en') return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return ['日', '月', '火', '水', '木', '金', '土'];
+  }
+
+  function monthHeading(year, month) {
+    const lang = global.DeskI18n ? DeskI18n.getLang() : 'jp';
+    if (lang === 'en') {
+      return new Date(year, month - 1, 1).toLocaleString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+    return `${year}年${month}月`;
+  }
+
+  function monthChipLabel(booking) {
+    const name = booking.guestName || (global.DeskI18n ? DeskI18n.t('unnamedGuest') : '—');
+    return `${booking.startTime} ${name}`;
+  }
+
+  function monthChipClass(booking) {
+    if (booking.status === 'pending_confirm') return 'is-pending';
+    if (booking.status === 'hold') return 'is-hold';
+    return 'is-booking';
+  }
+
+  function renderMonth(container, dateStr, options) {
+    const opts = options || {};
+    const parts = String(dateStr || '').split('-').map(Number);
+    const year = parts[0] || new Date().getFullYear();
+    const month = parts[1] || new Date().getMonth() + 1;
+    const cells = monthGrid(year, month, 0);
+    const start = cells[0].date;
+    const end = cells[cells.length - 1].date;
+    const bookings = BookingStore.listBookingsInRange
+      ? BookingStore.listBookingsInRange(start, end)
+      : [];
+    const byDate = {};
+    bookings.forEach((b) => {
+      if (!byDate[b.date]) byDate[b.date] = [];
+      byDate[b.date].push(b);
+    });
+    const today = BookingStore.todayBusinessDate();
+    const selected = dateStr;
+    const maxChips = 3;
+    const moreText = global.DeskI18n ? DeskI18n.t('monthMore') : '+{n}';
+
+    container.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'month-cal';
+
+    const head = document.createElement('div');
+    head.className = 'month-cal-head';
+    head.textContent = monthHeading(year, month);
+    wrap.appendChild(head);
+
+    const wrow = document.createElement('div');
+    wrow.className = 'month-cal-weekdays';
+    weekdayLabels().forEach((w) => {
+      const el = document.createElement('div');
+      el.textContent = w;
+      wrow.appendChild(el);
+    });
+    wrap.appendChild(wrow);
+
+    const grid = document.createElement('div');
+    grid.className = 'month-cal-grid';
+    cells.forEach((cell) => {
+      const dayEl = document.createElement('button');
+      dayEl.type = 'button';
+      dayEl.className = 'month-cal-day';
+      if (!cell.inMonth) dayEl.classList.add('is-out');
+      if (cell.date === today) dayEl.classList.add('is-today');
+      if (cell.date === selected) dayEl.classList.add('is-selected');
+      dayEl.dataset.date = cell.date;
+
+      const num = document.createElement('span');
+      num.className = 'month-cal-num';
+      num.textContent = String(cell.day);
+      dayEl.appendChild(num);
+
+      const list = byDate[cell.date] || [];
+      const show = list.slice(0, maxChips);
+      show.forEach((b) => {
+        const chip = document.createElement('span');
+        chip.className = `month-cal-chip ${monthChipClass(b)}`;
+        chip.textContent = monthChipLabel(b);
+        chip.title = monthChipLabel(b);
+        chip.dataset.bookingId = b.id;
+        dayEl.appendChild(chip);
+      });
+      if (list.length > maxChips) {
+        const more = document.createElement('span');
+        more.className = 'month-cal-more';
+        more.textContent = moreText.replace('{n}', String(list.length - maxChips));
+        dayEl.appendChild(more);
+      }
+      grid.appendChild(dayEl);
+    });
+    wrap.appendChild(grid);
+
+    wrap.addEventListener('click', (e) => {
+      const chip = e.target.closest('.month-cal-chip');
+      if (chip && chip.dataset.bookingId) {
+        e.preventDefault();
+        e.stopPropagation();
+        const booking = bookings.find((b) => b.id === chip.dataset.bookingId);
+        if (booking && opts.onBookingSelect) {
+          opts.onBookingSelect(booking, { x: e.clientX, y: e.clientY });
+        }
+        return;
+      }
+      const day = e.target.closest('.month-cal-day');
+      if (day && day.dataset.date && opts.onDayClick) {
+        opts.onDayClick(day.dataset.date);
+      }
+    });
+
+    container.appendChild(wrap);
+  }
+
+  function agendaWeekday(ymd) {
+    const [y, m, d] = String(ymd).split('-').map(Number);
+    const dow = new Date(y, (m || 1) - 1, d || 1).getDay();
+    const lang = global.DeskI18n ? DeskI18n.getLang() : 'jp';
+    if (lang === 'cn') return ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][dow];
+    if (lang === 'en') return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow];
+    return ['日', '月', '火', '水', '木', '金', '土'][dow];
+  }
+
+  function agendaDateLabel(ymd) {
+    const [, m, d] = String(ymd).split('-');
+    const lang = global.DeskI18n ? DeskI18n.getLang() : 'jp';
+    const wd = agendaWeekday(ymd);
+    if (lang === 'en') return `${Number(m)}/${Number(d)} ${wd}`;
+    return `${Number(m)}月${Number(d)}日 ${wd}`;
+  }
+
+  function agendaEscape(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;');
+  }
+
+  function agendaCourseText(b) {
+    const cfg = global.STORE_CONFIG || {};
+    const courses = cfg.courses || [];
+    const dur = Number(b.durationMinutes) || 0;
+    const lang =
+      global.DeskI18n && DeskI18n.getLang ? DeskI18n.getLang() : 'jp';
+    const pickName = (n) => {
+      if (!n) return '';
+      if (typeof n === 'object') return n[lang] || n.jp || n.cn || n.en || '';
+      const raw = String(n).trim();
+      if (raw.includes('/')) {
+        const parts = raw.split('/').map((x) => x.trim()).filter(Boolean);
+        if (lang === 'cn' && parts[1]) return parts[1];
+        if (lang === 'en' && parts[2]) return parts[2];
+        return parts[0] || raw;
+      }
+      return raw;
+    };
+    const labelOf = (c) => {
+      if (!c) return '';
+      const fromName = pickName(c.name);
+      if (fromName) return fromName;
+      if (global.DeskI18n && DeskI18n.courseLabel) {
+        return String(DeskI18n.courseLabel(c) || '').replace(/\s*[-–]\s*¥.*$/, '');
+      }
+      return String(c.id || '');
+    };
+    const durOf = (c) => {
+      if (!c) return 0;
+      if (c.durationMinutes) return Number(c.durationMinutes) || 0;
+      const m = String(labelOf(c) + ' ' + (typeof c.name === 'string' ? c.name : '')).match(
+        /(\d+)\s*(?:分钟|分|min)/i
+      );
+      return m ? Number(m[1]) : 0;
+    };
+    const sameDur = dur ? courses.filter((c) => durOf(c) === dur) : [];
+    let rematch = null;
+    if (global.WaBookingParse && WaBookingParse.matchCourseId) {
+      const id = WaBookingParse.matchCourseId(
+        [b.courseName, b.note].filter(Boolean).join('\n'),
+        courses,
+        dur
+      );
+      rematch = courses.find((c) => c && c.id === id) || null;
+    }
+    const byId = courses.find((c) => c && c.id === b.courseId);
+    const stored = pickName(b.courseName);
+    const storedIsGuest = stored && b.guestName && stored === String(b.guestName).trim();
+
+    const prefer = (c) => c && (!dur || !durOf(c) || durOf(c) === dur);
+    if (prefer(rematch) && labelOf(rematch)) return labelOf(rematch);
+    if (prefer(byId) && labelOf(byId)) return labelOf(byId);
+    if (sameDur.length) {
+      const typed =
+        sameDur.find((c) => /body|ボディ|身体|massage/i.test(`${labelOf(c)} ${c.id || ''}`)) ||
+        sameDur[0];
+      if (typed) return labelOf(typed);
+    }
+    if (stored && !storedIsGuest) return stored;
+    if (byId && labelOf(byId)) return labelOf(byId);
+    if (dur) return lang === 'en' ? `${dur} min` : `${dur}分钟`;
+    return '';
+  }
+
+  function agendaNoteText(b) {
+    let n = String((b && b.note) || '').trim();
+    n = n.replace(/^Service:\s*/i, '').trim();
+    if (!n || n === '-') return '';
+    const course = agendaCourseText(b);
+    if (course && n.replace(/\s+/g, '') === course.replace(/\s+/g, '')) return '';
+    return n;
+  }
+
+  function renderAgenda(container, bookings, options) {
+    const opts = options || {};
+    const today = BookingStore.todayBusinessDate ? BookingStore.todayBusinessDate() : '';
+    const empty = global.DeskI18n ? DeskI18n.t('upcomingEmpty') : '暂无今后预约';
+    const guestsUnit = global.DeskI18n ? DeskI18n.t('agendaGuests') : '人';
+    const t = (key, fallback) =>
+      global.DeskI18n ? DeskI18n.t(key) : fallback;
+    container.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'agenda';
+    const list = (bookings || []).filter((b) => b && b.status !== 'cancelled');
+    const head = document.createElement('div');
+    head.className = 'agenda-head';
+    head.innerHTML = `<span>${t('agendaColTime', '时间')}</span>
+      <span>${t('agendaColName', '姓名')}</span>
+      <span class="agenda-guests-h">${t('agendaColGuests', '人数')}</span>
+      <span>${t('agendaColCourse', '项目')}</span>
+      <span class="agenda-gap" aria-hidden="true"></span>
+      <span>${t('agendaColNote', '备注')}</span>
+      <span class="agenda-gap" aria-hidden="true"></span>
+      <span>${t('agendaColBeds', '床位')}</span>`;
+    wrap.appendChild(head);
+    if (!list.length) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'agenda-empty';
+      emptyEl.textContent = empty;
+      wrap.appendChild(emptyEl);
+      container.appendChild(wrap);
+      return;
+    }
+    let lastDate = '';
+    list.forEach((b) => {
+      if (b.date !== lastDate) {
+        lastDate = b.date;
+        const dateHead = document.createElement('div');
+        dateHead.className = 'agenda-date';
+        if (b.date === today) dateHead.classList.add('is-today');
+        dateHead.textContent = agendaDateLabel(b.date);
+        wrap.appendChild(dateHead);
+      }
+      const end = BookingStore.offsetToTime(
+        BookingStore.timeToOffset(b.startTime) + Number(b.durationMinutes || 60)
+      );
+      const beds = (b.beds || []).map((i) =>
+        global.DeskI18n ? DeskI18n.bedLabelAt(i) : i + 1
+      ).join('、');
+      const course = agendaCourseText(b);
+      const name = b.guestName || (global.DeskI18n ? DeskI18n.t('unnamedGuest') : '—');
+      const logged =
+        global.BookingStore && BookingStore.recordedOnLabel
+          ? BookingStore.recordedOnLabel(b)
+          : '';
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = `agenda-row is-${b.status || 'confirmed'}`;
+      row.dataset.bookingId = b.id;
+      row.dataset.date = b.date;
+      row.innerHTML = `<span class="agenda-time">${b.startTime}–${end}</span>
+        <span class="agenda-who"><span class="agenda-name">${agendaEscape(name)}</span>${
+          logged
+            ? `<span class="agenda-logged">${agendaEscape(logged)}</span>`
+            : ''
+        }</span>
+        <span class="agenda-guests">${b.guests || 1}${guestsUnit}</span>
+        <span class="agenda-course">${agendaEscape(course)}</span>
+        <span class="agenda-gap" aria-hidden="true"></span>
+        <span class="agenda-note">${agendaEscape(agendaNoteText(b))}</span>
+        <span class="agenda-gap" aria-hidden="true"></span>
+        <span class="agenda-beds">${agendaEscape(beds)}</span>`;
+      wrap.appendChild(row);
+    });
+    wrap.addEventListener('click', (e) => {
+      const row = e.target.closest('.agenda-row');
+      if (!row) return;
+      const booking = list.find((b) => b.id === row.dataset.bookingId);
+      if (booking && opts.onBookingSelect) {
+        opts.onBookingSelect(booking, { x: e.clientX, y: e.clientY });
+      }
+    });
+    container.appendChild(wrap);
+  }
+
   global.BoardUI = {
     renderBoard,
+    renderMonth,
+    renderAgenda,
     buildStatusChartImage,
     buildEmailDraft,
     buildOpenRequestEmail,

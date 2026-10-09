@@ -86,6 +86,26 @@
     if (!courseName) {
       courseName = summary.replace(/^\d+\s*人[，,]\s*\d+\s*(?:分钟|分)/, '').trim();
     }
+    const serviceBlob = [courseName, wa && wa.serviceRaw, summary, desc]
+      .filter(Boolean)
+      .join('\n');
+    const courseId =
+      (global.WaBookingParse && WaBookingParse.matchCourseId
+        ? WaBookingParse.matchCourseId(serviceBlob, (cfg && cfg.courses) || [], durationMinutes)
+        : '') ||
+      (wa && wa.courseId) ||
+      '';
+    if (courseId && global.BookingStore && BookingStore.resolveCourseName) {
+      courseName = BookingStore.resolveCourseName(courseId) || courseName;
+    } else if (courseId && cfg && cfg.courses) {
+      const hit = cfg.courses.find((c) => c.id === courseId);
+      if (hit) {
+        courseName =
+          global.WaBookingParse && WaBookingParse.courseNameText
+            ? WaBookingParse.courseNameText(hit)
+            : String(hit.name || courseName);
+      }
+    }
 
     const bookingId = priv.bookingId || pickLine(blob, ['Booking ID', '预约号']);
     let guestName =
@@ -112,7 +132,7 @@
       durationMinutes,
       guests: Math.max(1, guests),
       beds,
-      courseId: (wa && wa.courseId) || '',
+      courseId,
       courseName,
       guestName: guestName === '-' ? '' : guestName,
       guestPhone: guestPhone === '-' ? '' : guestPhone,
@@ -121,6 +141,7 @@
       existingBookingId: bookingId && bookingId !== '-' ? bookingId : '',
       googleEventId: ev.id,
       googleEventLink: ev.htmlLink || '',
+      googleCreatedAt: ev.created || '',
       issues,
       isAllDay,
     };
@@ -143,6 +164,59 @@
       date: dateStr,
       prune: items.length > 0 && !(opts && opts.prune === false),
     });
+  }
+
+  function addDaysYmd(ymd, days) {
+    const [y, m, d] = String(ymd || '').split('-').map(Number);
+    const dt = new Date(y || 2026, (m || 1) - 1, d || 1);
+    dt.setDate(dt.getDate() + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  async function runForRange(startYmd, endYmd) {
+    const cfg = global.STORE_CONFIG;
+    if (!cfg || !cfg.googleCalendarId) {
+      throw new Error('本店未配置 googleCalendarId');
+    }
+    if (!global.EmailClient || !EmailClient.listCalendarEvents) {
+      throw new Error('未加载日历客户端');
+    }
+    const data = await EmailClient.listCalendarEvents({
+      calendarId: cfg.googleCalendarId,
+      timeMin: `${startYmd}T00:00:00+09:00`,
+      timeMax: `${addDaysYmd(endYmd, 2)}T06:00:00+09:00`,
+    });
+    const items = data.items || [];
+    return BookingStore.importFromCalendarEvents(items, { prune: false });
+  }
+
+  async function syncUpcoming(onStatus, daysAhead) {
+    const start = BookingStore.todayBusinessDate();
+    const end = addDaysYmd(start, Number(daysAhead) || 365);
+    if (inFlight) return { ok: true, skipped: true };
+    if (isPagesPreview()) {
+      if (onStatus) onStatus(pagesPreviewStatus());
+      return { ok: true, mode: 'pages-preview' };
+    }
+    inFlight = true;
+    try {
+      const result = await runForRange(start, end);
+      const count = BookingStore.listUpcomingBookings
+        ? BookingStore.listUpcomingBookings(start).length
+        : 0;
+      const payload = { ok: true, date: start, upcoming: count, ...result };
+      if (onStatus) onStatus(payload);
+      return payload;
+    } catch (err) {
+      const payload = { ok: false, error: (err && err.message) || String(err) };
+      if (onStatus) onStatus(payload);
+      return payload;
+    } finally {
+      inFlight = false;
+    }
   }
 
   let autoTimer = null;
@@ -234,7 +308,9 @@
       Number(result.imported || 0) +
       Number(result.updated || 0) +
       Number(result.linked || 0);
-    if (global.BookingStore && result.date && BookingStore.listBookings) {
+    if (result.upcoming != null) {
+      count = Number(result.upcoming) || 0;
+    } else if (global.BookingStore && result.date && BookingStore.listBookings) {
       count = BookingStore.listBookings(result.date).filter(
         (b) => b.status !== 'cancelled'
       ).length;
@@ -244,12 +320,17 @@
     if (result.updated) extra.push(`改 ${result.updated}`);
     if (result.removed) extra.push(`撤 ${result.removed}`);
     const tail = extra.length ? ` · ${extra.join(' / ')}` : '';
+    if (result.upcoming != null) {
+      return `日历已同步 · 今后 ${count} 笔${tail}`;
+    }
     return `日历已同步 · 当日 ${count} 笔${tail}`;
   }
 
   global.CalendarImport = {
     parseEvent,
     runForDate,
+    runForRange,
+    syncUpcoming,
     startAutoSync,
     stopAutoSync,
     syncNow,
