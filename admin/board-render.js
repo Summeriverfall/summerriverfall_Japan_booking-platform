@@ -1340,16 +1340,60 @@
     return '';
   }
 
+  function agendaYmd(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const dt = new Date(s);
+    if (Number.isNaN(dt.getTime())) return '';
+    if (global.BookingStore && BookingStore.tokyoParts) {
+      const p = BookingStore.tokyoParts(dt);
+      return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+    }
+    return '';
+  }
+
+  function agendaMd(ymd) {
+    const m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return '';
+    const lang =
+      global.DeskI18n && DeskI18n.getLang ? DeskI18n.getLang() : 'cn';
+    if (lang === 'en') return `${Number(m[2])}/${Number(m[3])}`;
+    return `${Number(m[2])}月${Number(m[3])}日`;
+  }
+
+  function agendaShiftYmd(ymd, days) {
+    const [y, m, d] = String(ymd || '').split('-').map(Number);
+    if (!y || !m || !d) return '';
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + Number(days) || 0);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
   function agendaNoteText(b) {
-    const raw = String((b && b.note) || '').trim();
-    let n =
-      global.WaBookingParse && WaBookingParse.cleanBookingNote
-        ? WaBookingParse.cleanBookingNote(raw)
-        : raw.replace(/^Service:\s*/i, '').trim();
-    if (!n || n === '-') return '';
-    const course = agendaCourseText(b);
-    if (course && n.replace(/\s+/g, '') === course.replace(/\s+/g, '')) return '';
-    return n;
+    const visit = agendaYmd(b && b.date);
+    const recorded = agendaYmd(
+      b && (b.googleCreatedAt || b.recordedAt || b.createdAt)
+    );
+    if (!visit || !recorded) return '';
+    const [vy, vm, vd] = visit.split('-').map(Number);
+    const [ry, rm, rd] = recorded.split('-').map(Number);
+    const gap =
+      (Date.UTC(vy, vm - 1, vd) - Date.UTC(ry, rm - 1, rd)) / 86400000;
+    if (!(gap > 3)) return '';
+    const remind = agendaShiftYmd(visit, -1);
+    const mark = (ymd) =>
+      `<span class="agenda-md">${agendaEscape(agendaMd(ymd))}</span>`;
+    const tpl =
+      global.DeskI18n && DeskI18n.t
+        ? DeskI18n.t('agendaEarlyRecord')
+        : '{recorded}预约，建议{remind}提醒和确认';
+    return String(tpl)
+      .replace('{recorded}', mark(recorded))
+      .replace('{remind}', mark(remind));
   }
 
   function renderAgenda(container, bookings, options) {
@@ -1367,12 +1411,9 @@
     head.className = 'agenda-head';
     head.innerHTML = `<span>${t('agendaColTime', '时间')}</span>
       <span>${t('agendaColName', '姓名')}</span>
-      <span class="agenda-guests-h">${t('agendaColGuests', '人数')}</span>
       <span>${t('agendaColCourse', '项目')}</span>
-      <span class="agenda-gap" aria-hidden="true"></span>
-      <span>${t('agendaColNote', '备注')}</span>
-      <span class="agenda-gap" aria-hidden="true"></span>
-      <span>${t('agendaColBeds', '床位')}</span>`;
+      <span class="agenda-note-h">${t('agendaColNote', '提醒')}</span>
+      <span class="agenda-side-h">${t('agendaColSide', '人数')}</span>`;
     wrap.appendChild(head);
     if (!list.length) {
       const emptyEl = document.createElement('div');
@@ -1400,27 +1441,19 @@
       ).join('、');
       const course = agendaCourseText(b);
       const name = b.guestName || (global.DeskI18n ? DeskI18n.t('unnamedGuest') : '—');
-      const logged =
-        global.BookingStore && BookingStore.recordedOnLabel
-          ? BookingStore.recordedOnLabel(b)
-          : '';
       const row = document.createElement('button');
       row.type = 'button';
       row.className = `agenda-row is-${b.status || 'confirmed'}`;
       row.dataset.bookingId = b.id;
       row.dataset.date = b.date;
       row.innerHTML = `<span class="agenda-time">${b.startTime}–${end}</span>
-        <span class="agenda-who"><span class="agenda-name">${agendaEscape(name)}</span>${
-          logged
-            ? `<span class="agenda-logged">${agendaEscape(logged)}</span>`
-            : ''
-        }</span>
-        <span class="agenda-guests">${b.guests || 1}${guestsUnit}</span>
+        <span class="agenda-who"><span class="agenda-name">${agendaEscape(name)}</span></span>
         <span class="agenda-course">${agendaEscape(course)}</span>
-        <span class="agenda-gap" aria-hidden="true"></span>
-        <span class="agenda-note">${agendaEscape(agendaNoteText(b))}</span>
-        <span class="agenda-gap" aria-hidden="true"></span>
-        <span class="agenda-beds">${agendaEscape(beds)}</span>`;
+        <span class="agenda-note">${agendaNoteText(b)}</span>
+        <span class="agenda-side">
+          <span class="agenda-guests${parseInt(b.guests, 10) > 2 ? ' is-many' : ''}">${b.guests || 1}${guestsUnit}</span>
+          <span class="agenda-beds">${agendaEscape(beds)}</span>
+        </span>`;
       wrap.appendChild(row);
     });
     wrap.addEventListener('click', (e) => {
