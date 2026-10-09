@@ -33,6 +33,31 @@ function clearProxyEnv() {
   delete process.env.http_proxy;
 }
 
+function windowsSystemProxy() {
+  if (process.platform !== 'win32') return '';
+  try {
+    const { execSync } = require('child_process');
+    const enable = execSync(
+      'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" /v ProxyEnable',
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+    if (!/0x1\b/.test(enable)) return '';
+    const srv = execSync(
+      'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" /v ProxyServer',
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+    const m = srv.match(/ProxyServer\s+REG_SZ\s+(\S+)/i);
+    if (!m) return '';
+    const raw = m[1];
+    const mapped = raw.match(/https?=([^\s;]+)/i);
+    const hostport = mapped ? mapped[1] : raw.split(';')[0];
+    if (!hostport || !/:\d+/.test(hostport)) return '';
+    return hostport.includes('://') ? hostport : `http://${hostport}`;
+  } catch (_) {
+    return '';
+  }
+}
+
 async function ensureProxy() {
   const existing = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
   if (existing) {
@@ -41,21 +66,33 @@ async function ensureProxy() {
       console.log('[calendar] 使用代理', existing);
       return;
     }
-    console.warn('[calendar] 配置的代理不可用，改为直连', existing);
-    clearProxyEnv();
+    console.warn('[calendar] 配置的代理不可用，继续探测', existing);
   }
-  const candidates = [7897, 7890, 7891, 10809, 10808, 1080, 6152, 20171];
-  for (const port of candidates) {
+
+  const urls = [];
+  const win = windowsSystemProxy();
+  if (win) urls.push(win);
+  [7897, 7890, 7891, 17891, 10809, 10808, 1080, 6152, 20171].forEach((port) => {
+    urls.push(`http://127.0.0.1:${port}`);
+  });
+
+  const seen = new Set();
+  for (const url of urls) {
+    const port = Number((String(url).match(/:(\d+)(?:\/|$)/) || [])[1]);
+    if (!port || seen.has(port)) continue;
+    seen.add(port);
     // eslint-disable-next-line no-await-in-loop
-    if (await canConnect(port)) {
-      const url = `http://127.0.0.1:${port}`;
-      process.env.HTTPS_PROXY = url;
-      process.env.HTTP_PROXY = url;
-      console.log('[calendar] 自动使用本机代理', url);
+    if (await canConnect(port, /127\.0\.0\.1|localhost/i.test(url) ? '127.0.0.1' : undefined)) {
+      const use = url.includes('://') ? url : `http://127.0.0.1:${port}`;
+      process.env.HTTPS_PROXY = use;
+      process.env.HTTP_PROXY = use;
+      console.log('[calendar] 自动使用本机代理', use);
       return;
     }
   }
-  console.warn('[calendar] 未检测到本机代理，直连 Google');
+
+  clearProxyEnv();
+  console.warn('[calendar] 未检测到本机 HTTP 代理，直连 Google');
 }
 
 function getOAuthClient() {
@@ -328,32 +365,166 @@ function addDaysYmd(dateStr, days) {
   return `${yy}-${mm}-${dd}`;
 }
 
+function eventStartMs(ev) {
+  const raw =
+    (ev && ev.start && (ev.start.dateTime || ev.start.date)) ||
+    ev.startDateTime ||
+    '';
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+function eventClockHm(ev) {
+  const raw =
+    (ev && ev.start && (ev.start.dateTime || ev.start.date)) ||
+    ev.startDateTime ||
+    '';
+  const m = String(raw).match(/T(\d{2}):(\d{2})/);
+  return m ? `${m[1]}:${m[2]}` : '';
+}
+
+function eventGuestHint(ev) {
+  const blob = `${ev && ev.summary ? ev.summary : ''}\n${
+    ev && ev.description ? ev.description : ''
+  }`;
+  const name = (blob.match(/(?:^|\n)\s*(?:Name|姓名)\s*[:：]\s*(.+)$/im) ||
+    [])[1];
+  return String(name || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function eventBookingId(ev) {
+  const priv =
+    (ev && ev.extendedProperties && ev.extendedProperties.private) || {};
+  if (priv.bookingId) return String(priv.bookingId);
+  const desc = String((ev && ev.description) || '');
+  const m = desc.match(/Booking ID:\s*(\S+)/i);
+  return m ? m[1] : '';
+}
+
+/** 占用已匹配的事件，避免同一时段两笔被当成同一条、或一条被复用两次。 */
+function takeExistingMatch(items, incoming) {
+  const list = items || [];
+  const wantId = String((incoming && incoming.bookingId) || '');
+  const wantClock = eventClockHm(incoming);
+  const wantMs = eventStartMs(incoming);
+  const wantGuest = eventGuestHint(incoming);
+
+  let idx = -1;
+  if (wantId) {
+    idx = list.findIndex((ev) => eventBookingId(ev) === wantId);
+  }
+  if (idx < 0 && wantClock && wantGuest) {
+    idx = list.findIndex((ev) => {
+      const guest = eventGuestHint(ev);
+      return eventClockHm(ev) === wantClock && guest && guest === wantGuest;
+    });
+  }
+  if (idx < 0 && wantClock) {
+    idx = list.findIndex((ev) => eventClockHm(ev) === wantClock);
+  }
+  if (idx < 0 && wantMs) {
+    idx = list.findIndex((ev) => {
+      const got = eventStartMs(ev);
+      return got && Math.abs(got - wantMs) < 3 * 60 * 1000;
+    });
+  }
+  if (idx < 0) return null;
+  return list.splice(idx, 1)[0];
+}
+
+const rewriteLocks = new Map();
+
+function withRewriteLock(key, fn) {
+  const prev = rewriteLocks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const done = run.then(
+    () => {},
+    () => {}
+  );
+  rewriteLocks.set(key, done);
+  return run;
+}
+
 /**
- * 整日重写：先清空当日，再纯插入（不再 upsert，避免同日多次写入叠出重复）
+ * 整日重写。共享店日历只补没有的时段，已有店家事件不删不复制。
+ * 同一日历同一天串行，避免连点/双窗口各写一份。
  */
-async function rewriteDay(calendarId, dateStr, events) {
-  const cleaned = await cleanupPlatformDay(calendarId, dateStr);
+async function rewriteDay(calendarId, dateStr, events, opts) {
+  const shared = Boolean(opts && opts.shared);
+  const lockKey = `${calendarId}|${dateStr}`;
+  return withRewriteLock(lockKey, () =>
+    rewriteDayUnlocked(calendarId, dateStr, events, shared)
+  );
+}
+
+async function rewriteDayUnlocked(calendarId, dateStr, events, shared) {
   const cal = await getCalendarApi();
+  const timeMin = `${dateStr}T00:00:00+09:00`;
+  const timeMax = `${addDaysYmd(dateStr, 2)}T06:00:00+09:00`;
+  let existing = await listEventsInRange(calendarId, timeMin, timeMax);
   const written = [];
+  let skipped = 0;
+  let created = 0;
+  let removed = 0;
+
+  if (!shared) {
+    const cleaned = await cleanupPlatformDay(calendarId, dateStr);
+    removed = cleaned.removed || 0;
+    existing = existing.filter((ev) => !isPlatformEvent(ev));
+  }
+
   for (const ev of events || []) {
+    const hit = takeExistingMatch(existing, ev);
+    if (hit) {
+      skipped += 1;
+      written.push({
+        ok: true,
+        mode: 'skipped_exists',
+        eventId: hit.id,
+        htmlLink: hit.htmlLink || '',
+        bookingId: ev.bookingId || null,
+      });
+      continue;
+    }
     const body = buildEventBody(Object.assign({}, ev, { calendarId }));
     // eslint-disable-next-line no-await-in-loop
-    const created = await cal.events.insert({
+    const inserted = await cal.events.insert({
       calendarId,
       requestBody: body,
+    });
+    created += 1;
+    existing.push({
+      id: inserted.data.id,
+      start: inserted.data.start,
+      htmlLink: inserted.data.htmlLink,
+      summary: inserted.data.summary,
+      description: inserted.data.description,
+      extendedProperties: inserted.data.extendedProperties,
     });
     written.push({
       ok: true,
       mode: 'created',
-      eventId: created.data.id,
-      htmlLink: created.data.htmlLink,
+      eventId: inserted.data.id,
+      htmlLink: inserted.data.htmlLink,
       bookingId: ev.bookingId || null,
     });
   }
+  console.log('[calendar] rewrite-day', {
+    calendarId,
+    date: dateStr,
+    shared,
+    removed,
+    created,
+    skipped,
+  });
   return {
     ok: true,
-    removed: cleaned.removed,
-    written: written.length,
+    removed,
+    written: created,
+    skipped,
     events: written,
   };
 }

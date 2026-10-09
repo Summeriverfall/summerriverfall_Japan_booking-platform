@@ -29,10 +29,29 @@ function canConnect(port, host = '127.0.0.1') {
   });
 }
 
+function proxyPortFromEnv() {
+  const raw = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  const m = String(raw).match(/:(\d+)(?:\/|$)/);
+  return m ? Number(m[1]) : null;
+}
+
+function clearProxyEnv() {
+  delete process.env.HTTPS_PROXY;
+  delete process.env.HTTP_PROXY;
+  delete process.env.https_proxy;
+  delete process.env.http_proxy;
+}
+
 async function ensureProxy() {
-  if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
-    console.log('[proxy] 使用已有代理', process.env.HTTPS_PROXY || process.env.HTTP_PROXY);
-    return;
+  const existing = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+  if (existing) {
+    const port = proxyPortFromEnv();
+    if (port && (await canConnect(port))) {
+      console.log('[proxy] 使用已有代理', existing);
+      return;
+    }
+    console.warn('[proxy] 配置的代理不可用，改为直连', existing);
+    clearProxyEnv();
   }
   const candidates = [7897, 7890, 10809, 10808];
   for (const port of candidates) {
@@ -45,7 +64,7 @@ async function ensureProxy() {
       return;
     }
   }
-  console.warn('[proxy] 未检测到本机代理，若换 token 失败请开启 VPN 后重试');
+  console.warn('[proxy] 未检测到本机代理，直连 Google');
 }
 
 function upsertEnv(key, val) {

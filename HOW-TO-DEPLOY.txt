@@ -1,0 +1,87 @@
+﻿日本门店预约看板 · 部署说明
+==========================
+
+本包可以在另一台电脑上跑客服看板，并同步 Google 日历。
+包内含 server/.env（Gmail / Google 密钥），不要发到公开网盘或 GitHub。
+
+打开看板（部署成功后）
+  http://127.0.0.1:8787/cs.html?store=starryflow
+  列表：http://127.0.0.1:8787/cs.html?store=starryflow&view=list
+  选店：http://127.0.0.1:8787/admin-portal.html
+
+店家码（测试）
+  RUANA88 / STARRY88 / LUNA88 / FLORA88
+
+
+一、另一台 Windows 电脑（店里电脑、24 小时开机）
+------------------------------------------------
+1. 安装 Node.js 18 或更新（https://nodejs.org/ 选 LTS）
+2. 解压本 zip，例如放到 D:\booking-platform
+3. 打开 PowerShell：
+
+   cd D:\booking-platform\server
+   npm install
+   npm start
+
+4. 不要关这个窗口。浏览器打开上面的看板地址。
+
+若该电脑要翻墙才能访问 Google：先开 Clash / VPN（常见端口 7897），
+再启动 npm start。网关会自动探测本机代理。
+
+
+二、Linux 云服务器（推荐，电脑关机也不影响）
+------------------------------------------
+1. 买一台一直开机的轻量服务器（东京 / 新加坡 / 香港，1 核 1G 即可）
+2. 把 zip 传到服务器并解压，例如 /opt/booking-platform
+3. 安装 Node 18+ 后：
+
+   cd /opt/booking-platform/server
+   npm install
+   npm start
+
+4. 本机测：curl http://127.0.0.1:8787/health
+   应看到 "calendarConfigured": true
+
+开机自启（systemd），新建 /etc/systemd/system/booking-gateway.service：
+
+   [Unit]
+   Description=Japan booking gateway
+   After=network.target
+
+   [Service]
+   Type=simple
+   WorkingDirectory=/opt/booking-platform/server
+   ExecStart=/usr/bin/node index.js
+   Restart=always
+   RestartSec=3
+
+   [Install]
+   WantedBy=multi-user.target
+
+然后：
+
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now booking-gateway
+
+
+三、让别人用固定网址打开（不要用 trycloudflare 临时链接）
+--------------------------------------------------------
+临时 trycloudflare 会过期，电脑一关就断。
+
+做法 A：Cloudflare 命名隧道（固定域名，推荐）
+  1. 注册 Cloudflare，把一个域名加进去
+  2. 在这台 24 小时机器安装 cloudflared 并登录
+  3. 建隧道，把 hostname 指到 http://127.0.0.1:8787
+  4. 别人打开 https://你的域名/cs.html?store=starryflow
+
+做法 B：云服务器公网 IP
+  防火墙放行 8787 后打开：
+  http://服务器IP:8787/cs.html?store=starryflow
+  建议再套 Cloudflare HTTPS，不要长期裸用 HTTP。
+
+
+注意
+- 预约列表存在「打开页面的浏览器」里；Starry 真数据在 Google 日历，
+  打开看板会自动拉日历。换电脑后用同一套 .env 即可。
+- 不要把本 zip 上传到公开仓库。
+- GitHub Pages 只能看空界面，不能拉店家日历。

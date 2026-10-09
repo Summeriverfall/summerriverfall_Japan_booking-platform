@@ -7,8 +7,15 @@
   }
 
   function baseUrl() {
+    const proto = String((location && location.protocol) || '');
     const host = String((location && location.hostname) || '');
-    if (host === '127.0.0.1' || host === 'localhost' || host === '[::1]') {
+    if (
+      proto === 'file:' ||
+      !host ||
+      host === '127.0.0.1' ||
+      host === 'localhost' ||
+      host === '[::1]'
+    ) {
       return String(cfg().apiBaseUrl || 'http://127.0.0.1:8787').replace(/\/$/, '');
     }
     if (/\.github\.io$/i.test(host)) {
@@ -124,7 +131,12 @@
     const res = await fetch(`${baseUrl()}/calendar/rewrite-day`, {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        calendarId: payload.calendarId,
+        date: payload.date,
+        events: payload.events || [],
+        shared: Boolean(payload.shared),
+      }),
     });
     let data = null;
     try {

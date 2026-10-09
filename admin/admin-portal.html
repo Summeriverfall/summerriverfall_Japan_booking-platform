@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>管理员端 · 选择门店</title>
+  <script src="via-gateway.js?v=20261009-rec3"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="portal.css">
   <style>
@@ -88,6 +89,43 @@
     .res-msg { font-size: .78rem; color: var(--muted); margin-top: .4rem; min-height: 1.1em; }
     .res-msg.ok { color: #2f7d4a; }
     .res-msg.err { color: #b42318; }
+    .upcoming-all {
+      margin-top: 1.8rem;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 1.2rem 1.15rem 1rem;
+      box-shadow: 0 8px 28px rgba(40, 30, 20, .05);
+    }
+    .upcoming-all h2 {
+      font-family: var(--display);
+      font-size: 1.45rem;
+      font-weight: 600;
+      margin-bottom: .3rem;
+    }
+    .upcoming-all .lede { margin-bottom: .8rem; font-size: .88rem; }
+    .up-date {
+      font-size: .82rem;
+      font-weight: 700;
+      color: #6b4f28;
+      padding: .55rem .15rem .25rem;
+      border-top: 1px solid var(--line);
+    }
+    .up-date:first-of-type { border-top: none; padding-top: .15rem; }
+    .up-row {
+      display: grid;
+      grid-template-columns: 4.4rem minmax(0, 1fr) minmax(0, 1.1fr);
+      gap: .5rem;
+      align-items: center;
+      padding: .45rem .2rem;
+      text-decoration: none;
+      color: inherit;
+      border-radius: 8px;
+    }
+    .up-row:hover { background: rgba(154,115,72,.08); }
+    .up-time { font-weight: 600; font-size: .85rem; }
+    .up-store { font-size: .82rem; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .up-guest { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body class="portal-body">
@@ -107,10 +145,11 @@
     </div>
 
     <div class="store-grid" id="storeGrid"></div>
+    <section class="upcoming-all" id="upcomingAll"></section>
   </main>
 
-  <script src="stores.js?v=20260923-hours3"></script>
-  <script src="desk-i18n.js?v=20260923-hours3"></script>
+  <script src="stores.js?v=20260924-cal22"></script>
+  <script src="desk-i18n.js?v=20260924-cal22"></script>
   <script>
     StoreRegistry.setRole('admin');
     const grid = document.getElementById('storeGrid');
@@ -129,6 +168,7 @@
       btnEdit.textContent = editing ? DeskI18n.t('doneEdit') : DeskI18n.t('editResources');
       editHint.textContent = editing ? DeskI18n.t('editHintOn') : DeskI18n.t('editHintNormal');
       render();
+      renderUpcoming();
     });
     document.title = DeskI18n.t('adminPortalTitle');
     DeskI18n.applyDom();
@@ -428,7 +468,43 @@
       render();
     });
 
+    function renderUpcoming() {
+      const box = document.getElementById('upcomingAll');
+      if (!box || !StoreRegistry.listUpcomingAllStores) return;
+      const rows = StoreRegistry.listUpcomingAllStores();
+      const title = DeskI18n.t('upcomingAllTitle');
+      const hint = DeskI18n.t('upcomingAllHint');
+      const empty = DeskI18n.t('upcomingEmpty');
+      const head = `<h2>${escapeHtml(title)}</h2><p class="lede">${escapeHtml(hint)}</p>`;
+      if (!rows.length) {
+        box.innerHTML = `${head}<p class="lede">${escapeHtml(empty)}</p>`;
+        return;
+      }
+      let lastDate = '';
+      const parts = [head];
+      rows.forEach((row) => {
+        const b = row.booking || {};
+        if (b.date !== lastDate) {
+          lastDate = b.date;
+          parts.push(`<div class="up-date">${escapeHtml(b.date)}</div>`);
+        }
+        const storeName = DeskI18n.storeName(row.store);
+        const href = `cs.html?store=${encodeURIComponent(row.storeId)}&date=${encodeURIComponent(
+          b.date || ''
+        )}`;
+        parts.push(
+          `<a class="up-row" href="${href}">
+            <span class="up-time">${escapeHtml(b.startTime || '')}</span>
+            <span class="up-store">${escapeHtml(storeName)}</span>
+            <span class="up-guest">${escapeHtml(b.guestName || DeskI18n.t('unnamedGuest'))}</span>
+          </a>`
+        );
+      });
+      box.innerHTML = parts.join('');
+    }
+
     render();
+    renderUpcoming();
   </script>
 </body>
 </html>

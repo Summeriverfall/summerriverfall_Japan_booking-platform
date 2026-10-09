@@ -1,0 +1,31 @@
+日本门店预约管理平台 · 干净交付包
+================================
+
+本包已去掉 node_modules、密钥、.git、运行数据，只留可部署网页与网关源码。
+
+在线版
+  https://summeriverfall.github.io/summerriverfall_Japan_booking-platform/
+
+本地网页
+  打开 admin/index.html
+  或用 Nginx / IIS / GitHub Pages 托管整个文件夹（入口在 admin/）
+
+包含
+  admin/      客服 / 商家 / 技师端（数据在浏览器 localStorage）
+  server/     可选邮件/日历网关源码（无 node_modules、无 .env）
+  README.md
+  DEPLOY.txt
+
+不含
+  node_modules、.env、Google client_secret、.git、运行数据
+
+测试码
+  门店：RUANA88 / STARRY88 / LUNA88 / FLORA88
+  技师：R1–R4 / S1–S4 / L1–L4 / F1–F4
+
+日历同步说明
+  看板每 30 秒从本机网关拉 Google 日历。Pages 是 HTTPS，无法直接访问 127.0.0.1:8787。
+  本机看板：http://127.0.0.1:8787/cs.html?store=starryflow
+
+可选邮件/日历网关
+  cd server → npm install → 复制 .env.example 为 .env → npm run auth-google → npm start

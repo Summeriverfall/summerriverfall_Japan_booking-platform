@@ -98,22 +98,22 @@
       ],
       confirmGuestsThreshold: 2,
       courses: [
-        { id: 'body-60', name: 'ボディマッサージ 60分 / 身体按摩 60分钟' },
-        { id: 'body-90', name: 'ボディマッサージ 90分 / 身体按摩 90分钟' },
-        { id: 'body-120', name: 'ボディマッサージ 120分 / 身体按摩 120分钟' },
-        { id: 'oil-60', name: 'アロマオイル 60分 / 芳香精油 60分钟' },
-        { id: 'oil-90', name: 'アロマオイル 90分 / 芳香精油 90分钟' },
-        { id: 'oil-120', name: 'アロマオイル 120分 / 芳香精油 120分钟' },
-        { id: 'spa-90', name: 'スパトリートメント 90分 / 水疗护理 90分钟' },
-        { id: 'spa-120', name: 'スパトリートメント 120分 / 水疗护理 120分钟' },
-        { id: 'relax-60', name: 'リラクゼーション 60分 / 放松护理 60分钟' },
-        { id: 'head-30', name: 'ヘッドスパ 30分 / 头部水疗 30分钟' },
-        { id: 'head-45', name: 'ヘッドスパ 45分 / 头部水疗 45分钟' },
-        { id: 'foot-30', name: 'フットセラピー 30分 / 足部护理 30分钟' },
-        { id: 'foot-45', name: 'フットセラピー 45分 / 足部护理 45分钟' },
-        { id: 'head-shoulder', name: 'ヘッド＆ショルダー 45分 / 头肩护理 45分钟' },
-        { id: 'pair-90', name: 'ペアコース 90分 / 双人套餐 90分钟' },
-        { id: 'midnight-120', name: 'ミッドナイトスパ 120分 / 深夜水疗 120分钟' },
+        { id: 'body-60', durationMinutes: 60, name: 'ボディマッサージ 60分 / 身体按摩 60分钟' },
+        { id: 'body-90', durationMinutes: 90, name: 'ボディマッサージ 90分 / 身体按摩 90分钟' },
+        { id: 'body-120', durationMinutes: 120, name: 'ボディマッサージ 120分 / 身体按摩 120分钟' },
+        { id: 'oil-60', durationMinutes: 60, name: 'アロマオイル 60分 / 芳香精油 60分钟' },
+        { id: 'oil-90', durationMinutes: 90, name: 'アロマオイル 90分 / 芳香精油 90分钟' },
+        { id: 'oil-120', durationMinutes: 120, name: 'アロマオイル 120分 / 芳香精油 120分钟' },
+        { id: 'spa-90', durationMinutes: 90, name: 'スパトリートメント 90分 / 水疗护理 90分钟' },
+        { id: 'spa-120', durationMinutes: 120, name: 'スパトリートメント 120分 / 水疗护理 120分钟' },
+        { id: 'relax-60', durationMinutes: 60, name: 'リラクゼーション 60分 / 放松护理 60分钟' },
+        { id: 'head-30', durationMinutes: 30, name: 'ヘッドスパ 30分 / 头部水疗 30分钟' },
+        { id: 'head-45', durationMinutes: 45, name: 'ヘッドスパ 45分 / 头部水疗 45分钟' },
+        { id: 'foot-30', durationMinutes: 30, name: 'フットセラピー 30分 / 足部护理 30分钟' },
+        { id: 'foot-45', durationMinutes: 45, name: 'フットセラピー 45分 / 足部护理 45分钟' },
+        { id: 'head-shoulder', durationMinutes: 45, name: 'ヘッド＆ショルダー 45分 / 头肩护理 45分钟' },
+        { id: 'pair-90', durationMinutes: 90, name: 'ペアコース 90分 / 双人套餐 90分钟' },
+        { id: 'midnight-120', durationMinutes: 120, name: 'ミッドナイトスパ 120分 / 深夜水疗 120分钟' },
       ],
       channels: [
         { id: 'whatsapp', name: 'WhatsApp' },
@@ -644,8 +644,38 @@
     } catch (e) {}
   }
 
+  function tokyoYmd() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date());
+  }
+
+  function listUpcomingAllStores(fromYmd) {
+    const from = fromYmd || tokyoYmd();
+    const rows = [];
+    listStores().forEach((store) => {
+      let bookings = [];
+      try {
+        const raw = JSON.parse(localStorage.getItem(store.storageKey) || '{}');
+        bookings = Array.isArray(raw.bookings) ? raw.bookings : [];
+      } catch (e) {
+        bookings = [];
+      }
+      bookings.forEach((b) => {
+        if (!b || b.status === 'cancelled' || !b.date || b.date < from) return;
+        rows.push({ storeId: store.storeId, store, booking: b });
+      });
+    });
+    rows.sort((a, b) => {
+      const da = String(a.booking.date).localeCompare(String(b.booking.date));
+      if (da) return da;
+      return String(a.booking.startTime || '').localeCompare(String(b.booking.startTime || ''));
+    });
+    return rows;
+  }
+
   global.StoreRegistry = {
     listStores,
+    listUpcomingAllStores,
+    tokyoYmd,
     getStore,
     findByAccessCode,
     applyStore,

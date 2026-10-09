@@ -1341,8 +1341,11 @@
   }
 
   function agendaNoteText(b) {
-    let n = String((b && b.note) || '').trim();
-    n = n.replace(/^Service:\s*/i, '').trim();
+    const raw = String((b && b.note) || '').trim();
+    let n =
+      global.WaBookingParse && WaBookingParse.cleanBookingNote
+        ? WaBookingParse.cleanBookingNote(raw)
+        : raw.replace(/^Service:\s*/i, '').trim();
     if (!n || n === '-') return '';
     const course = agendaCourseText(b);
     if (course && n.replace(/\s+/g, '') === course.replace(/\s+/g, '')) return '';

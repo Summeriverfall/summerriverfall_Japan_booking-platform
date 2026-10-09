@@ -78,28 +78,91 @@
 
   function extractDurationMinutes(serviceText) {
     if (!serviceText) return 0;
-    const m = serviceText.match(/(\d+)\s*[-–]?\s*(?:Minute|Minutes|min|Mins|分钟)/i);
+    const m = String(serviceText).match(
+      /(\d+)\s*[-–]?\s*(?:Minutes?|Mins?|分钟|分)/i
+    );
     return m ? Number(m[1]) : 0;
   }
 
-  function matchCourseId(serviceText, courses) {
-    if (!serviceText || !courses || !courses.length) return '';
-    const lower = serviceText.toLowerCase();
-    const hit = courses.find((c) => {
-      const n = (c.name || '').toLowerCase();
-      return n && (lower.includes(n.split('/')[0].trim()) || n.includes(lower.slice(0, 12)));
+  function courseNameText(c) {
+    if (!c) return '';
+    const n = c.name;
+    if (n && typeof n === 'object' && !Array.isArray(n)) {
+      return [n.jp, n.cn, n.en, n.ja, c.id].filter(Boolean).map(String).join(' ');
+    }
+    return String(n || c.id || '');
+  }
+
+  function courseDurationMinutes(c) {
+    if (c && c.durationMinutes) return Number(c.durationMinutes) || 0;
+    return extractDurationMinutes(courseNameText(c));
+  }
+
+  function courseTypeTags(text) {
+    const s = String(text || '');
+    const tags = [];
+    [
+      [/oil|アロマ|精油|arom/i, 'oil'],
+      [/lymph|リンパ/i, 'lymph'],
+      [/midnight|ミッドナイト|深夜/i, 'midnight'],
+      [/pair|ペア|双人|couple/i, 'pair'],
+      [/head[\s&＆]*shoulder|ヘッド.*ショルダー|头肩/i, 'head-shoulder'],
+      [/head|ヘッド|头部/i, 'head'],
+      [/foot|フット|足部|足リフレ/i, 'foot'],
+      [/relax|リラックス|放松/i, 'relax'],
+      [/spa|スパ|水疗/i, 'spa'],
+      [/body|ボディ|身体|全身|massage|マッサージ/i, 'body'],
+    ].forEach(([re, tag]) => {
+      if (re.test(s)) tags.push(tag);
     });
-    if (hit) return hit.id;
-    // 关键词
-    if (/oil|オイル|精油/.test(lower)) {
-      const c = courses.find((x) => /oil|オイル|精油/i.test(x.name));
-      if (c) return c.id;
+    return tags;
+  }
+
+  function matchCourseId(serviceText, courses, durationMinutes) {
+    if (!courses || !courses.length) return '';
+    const text = String(serviceText || '');
+    const lower = text.toLowerCase();
+    const dur = Number(durationMinutes) || extractDurationMinutes(text) || 0;
+    const textTags = courseTypeTags(text);
+
+    let best = null;
+    let bestScore = -1;
+    courses.forEach((c) => {
+      const name = courseNameText(c);
+      const nameLower = name.toLowerCase();
+      const cDur = courseDurationMinutes(c);
+      const cTags = courseTypeTags(`${name} ${c.id || ''}`);
+      let score = 0;
+      if (nameLower && lower) {
+        if (lower.includes(nameLower) || nameLower.includes(lower.trim())) score += 30;
+        else {
+          const first = nameLower.split('/')[0].trim();
+          if (first && lower.includes(first)) score += 18;
+        }
+      }
+      if (dur && cDur && dur === cDur) score += 20;
+      else if (dur && cDur && Math.abs(dur - cDur) <= 15) score += 4;
+      else if (dur && cDur) score -= 25;
+      if (textTags.length && cTags.some((t) => textTags.includes(t))) score += 16;
+      if (c.id && lower.includes(String(c.id).toLowerCase())) score += 8;
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    });
+    if (best && bestScore >= 16) return best.id;
+
+    if (dur) {
+      const sameDur = courses.filter((c) => courseDurationMinutes(c) === dur);
+      if (sameDur.length === 1) return sameDur[0].id;
+      if (sameDur.length) {
+        const typed = sameDur.find((c) =>
+          courseTypeTags(`${courseNameText(c)} ${c.id || ''}`).includes('body')
+        );
+        return (typed || sameDur[0]).id;
+      }
     }
-    if (/body|ボディ|身体|full package|package/.test(lower)) {
-      const c = courses.find((x) => /body|ボディ|身体|spa|package|コース/i.test(x.name));
-      if (c) return c.id;
-    }
-    return courses[0] ? courses[0].id : '';
+    return '';
   }
 
   function parseWhatsAppBooking(text, options) {
@@ -155,11 +218,10 @@
     let durationMinutes = extractDurationMinutes(service) || extractDurationMinutes(raw);
     if (!durationMinutes) durationMinutes = 60;
 
-    const courseId = matchCourseId(service, courses);
-    const noteParts = [];
-    if (service) noteParts.push(`Service: ${service}`);
-    const price = pick(raw, [/(?:^|\n)\s*Price\s*[:：]\s*(.+)$/im, /Total\s*[:：]\s*(.+)$/im]);
-    if (price) noteParts.push(`Price: ${price}`);
+    const courseId = matchCourseId(service || raw, courses, durationMinutes);
+    const noteRaw = pick(raw, [
+      /(?:^|\n)\s*(?:Note|备注|備考|Memo|Special request)\s*[:：]\s*(.+)$/im,
+    ]);
 
     return {
       ok: !!(name || startTime || guestsRaw),
@@ -171,10 +233,34 @@
       durationMinutes,
       courseId,
       channelId: 'whatsapp',
-      note: noteParts.join(' · '),
+      note: cleanBookingNote(noteRaw),
       serviceRaw: service,
     };
   }
 
-  global.WaBookingParse = { parseWhatsAppBooking, parseTimeTo24, parseDateToISO };
+  function cleanBookingNote(text) {
+    let n = String(text || '').trim();
+    if (!n || n === '-') return '';
+    n = n
+      .replace(/(?:^|[•·|,;]\s*)(?:Service|Price|Total)\s*[:：]\s*[^•·\n]+/gi, ' ')
+      .replace(/\d+\s*-?\s*Minute(?:s)?\s+(?:Full\s+)?Package(?:\s*[•·].*)?/gi, ' ')
+      .replace(/\d+\s*-?\s*Minute(?:s)?\s+dual[- ]Therapist\s*Pack(?:age)?(?:\s*[•·].*)?/gi, ' ')
+      .replace(/Package\s*[•·]\s*Price[:：]?.*$/gi, ' ')
+      .replace(/^[•·,;|\s]+|[•·,;|\s]+$/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    if (!n || n === '-') return '';
+    if (/^(?:body|massage|package|price)\b/i.test(n) && n.length < 48) return '';
+    return n;
+  }
+
+  global.WaBookingParse = {
+    parseWhatsAppBooking,
+    parseTimeTo24,
+    parseDateToISO,
+    matchCourseId,
+    courseNameText,
+    courseDurationMinutes,
+    cleanBookingNote,
+  };
 })(window);

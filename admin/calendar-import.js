@@ -136,7 +136,18 @@
       courseName,
       guestName: guestName === '-' ? '' : guestName,
       guestPhone: guestPhone === '-' ? '' : guestPhone,
-      note: (wa && wa.note) || (desc ? desc.slice(0, 240) : ''),
+      note: (function () {
+        const cleaner =
+          global.WaBookingParse && WaBookingParse.cleanBookingNote
+            ? WaBookingParse.cleanBookingNote
+            : function (s) {
+                return String(s || '').trim();
+              };
+        const fromWa = cleaner(wa && wa.note);
+        const fromLine = cleaner(pickLine(desc, ['Note', '备注', '備考', 'Memo']));
+        const counted = (String(desc || '').match(/计入[^。\n]{2,40}/) || [])[0] || '';
+        return fromWa || fromLine || cleaner(counted);
+      })(),
       channelId: 'whatsapp',
       existingBookingId: bookingId && bookingId !== '-' ? bookingId : '',
       googleEventId: ev.id,
@@ -299,7 +310,13 @@
     }
     if (!result.ok) {
       const err = String(result.error || '');
-      if (/7897|ECONNREFUSED|proxy/i.test(err)) {
+      if (typeof location !== 'undefined' && location.protocol === 'file:') {
+        return '请用 http://127.0.0.1:8787/cs.html 打开看板，不要直接双击本地文件。';
+      }
+      if (/Failed to fetch|NetworkError|Load failed/i.test(err)) {
+        return '日历未同步：连不上本机网关。请用 http://127.0.0.1:8787/cs.html 打开。';
+      }
+      if (/7897|ECONNREFUSED|proxy|代理|超时|TIMEOUT/i.test(err)) {
         return '日历未同步：本机代理没开。请打开 Clash/VPN 后点「立即同步日历」。';
       }
       return `日历未同步：${result.error || '网关不可用'}`;
