@@ -1387,13 +1387,46 @@
     const remind = agendaShiftYmd(visit, -1);
     const mark = (ymd) =>
       `<span class="agenda-md">${agendaEscape(agendaMd(ymd))}</span>`;
+    const today =
+      global.BookingStore && BookingStore.todayBusinessDate
+        ? BookingStore.todayBusinessDate()
+        : '';
+    let daysHtml = '';
+    if (today && remind) {
+      const [ty, tm, td] = today.split('-').map(Number);
+      const [yy, mm, dd] = remind.split('-').map(Number);
+      const n =
+        (Date.UTC(yy, mm - 1, dd) - Date.UTC(ty, tm - 1, td)) / 86400000;
+      const lang =
+        global.DeskI18n && DeskI18n.getLang ? DeskI18n.getLang() : 'cn';
+      let label = '';
+      if (n === 0) {
+        label = lang === 'en' ? ' (today)' : lang === 'jp' ? '（今日）' : '（今天）';
+      } else if (n > 0) {
+        label =
+          lang === 'en'
+            ? ` (${n} days later)`
+            : lang === 'jp'
+              ? `（${n}日後）`
+              : `（${n}天后）`;
+      } else {
+        label =
+          lang === 'en'
+            ? ` (${-n} days ago)`
+            : lang === 'jp'
+              ? `（${-n}日前）`
+              : `（${-n}天前）`;
+      }
+      daysHtml = `<span class="agenda-days">${agendaEscape(label)}</span>`;
+    }
     const tpl =
       global.DeskI18n && DeskI18n.t
         ? DeskI18n.t('agendaEarlyRecord')
-        : '{recorded}预约，建议{remind}提醒和确认';
+        : '{recorded}预约，建议{remind}{days}提醒和确认';
     return String(tpl)
       .replace('{recorded}', mark(recorded))
-      .replace('{remind}', mark(remind));
+      .replace('{remind}', mark(remind))
+      .replace('{days}', daysHtml);
   }
 
   function renderAgenda(container, bookings, options) {

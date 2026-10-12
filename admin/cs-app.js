@@ -137,6 +137,13 @@
     const rangeField = document.getElementById('listRangeField');
     if (dateField) dateField.hidden = boardView === 'list';
     if (rangeField) rangeField.hidden = boardView !== 'list';
+    const hideListExtras = boardView === 'list';
+    const waPastePanel = document.getElementById('waPastePanel');
+    const emailPanel = document.getElementById('emailPanel');
+    if (waPastePanel) waPastePanel.hidden = hideListExtras;
+    if (emailPanel) emailPanel.hidden = hideListExtras;
+    const btnPushCal = document.getElementById('btnPushCal');
+    if (btnPushCal) btnPushCal.hidden = true;
     ['Week', 'Month', 'All'].forEach((key) => {
       const btn = document.getElementById(`btnRange${key}`);
       if (btn) btn.classList.toggle('is-on', listRange === key.toLowerCase());

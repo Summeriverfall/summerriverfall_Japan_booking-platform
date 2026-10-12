@@ -14,7 +14,7 @@
   --green: #1e8e4f;
   --red: #c0392b;
   --card: #fff;
-  --font: "Noto Sans SC", "Segoe UI", sans-serif;
+  --font: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -274,7 +274,8 @@ a:hover { text-decoration: underline; }
 .field[hidden],
 .field-date[hidden],
 .field-range[hidden],
-.toolbar-debug[hidden] { display: none !important; }
+.toolbar-debug[hidden],
+.toolbar .btn[hidden] { display: none !important; }
 .field-date { min-width: 220px; }
 .field-range { min-width: 220px; }
 .date-step {
